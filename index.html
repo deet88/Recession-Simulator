@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recession Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0b0d14; --surface: #13151f; --card: #1a1d2b; --card2: #1f2233;
+  --border: #272b3d; --border2: #323654; --text: #e4e8f0; --muted: #7a8499;
+  --faint: #4a5168; --accent: #5d6af0; --accent-light: #818cf8;
+  --green: #22c55e; --red: #f04f5a; --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+
+header { background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; position: sticky; top: 0; z-index: 100; }
+.header-brand h1 { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -.01em; }
+.header-brand h1 em { font-style: normal; color: var(--accent-light); }
+.header-brand p { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.header-stats { display: flex; gap: 28px; }
+.hstat { text-align: right; }
+.hstat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.hstat-value { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -.02em; line-height: 1.2; }
+.hstat-value.dyn { color: var(--accent-light); }
+
+.layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 57px); }
+
+.sidebar { background: var(--surface); border-right: 1px solid var(--border);
+  padding: 16px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.sidebar-label { font-size: 10px; font-weight: 700; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .1em; padding: 0 4px; }
+.btn-row { display: flex; gap: 6px; }
+.btn { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border2);
+  background: var(--card); color: var(--muted); font-size: 11px; font-weight: 500;
+  cursor: pointer; transition: all .15s; white-space: nowrap; }
+.btn:hover { background: var(--card2); color: var(--text); }
+.btn-full { flex: 1; text-align: center; }
+.preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.btn-preset { border-color: rgba(93,106,240,.45); color: var(--accent-light); }
+.btn-preset:hover { background: rgba(93,106,240,.15); border-color: var(--accent); color: #fff; }
+@keyframes alloc-flash {
+  0%   { background: rgba(93,106,240,.22); }
+  100% { background: var(--card2); }
+}
+.alloc-row.flashed { animation: alloc-flash .55s ease-out; }
+.mode-toggle { display: flex; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 7px; padding: 2px; gap: 2px; }
+.mode-btn { flex: 1; padding: 5px 6px; border-radius: 5px; border: none;
+  background: transparent; color: var(--muted); font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all .15s; }
+.mode-btn.active { background: var(--accent); color: #fff; }
+.rec-list { display: flex; flex-direction: column; gap: 2px; }
+.rec-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+  border-radius: 7px; cursor: pointer; transition: background .12s;
+  border: 1px solid transparent; user-select: none; }
+.rec-item:hover { background: var(--card); }
+.rec-item.active { background: var(--card); border-color: var(--border2); }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rec-info { flex: 1; min-width: 0; }
+.rec-name { font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; }
+.rec-period { font-size: 10px; color: var(--muted); }
+.rec-badge { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; flex-shrink: 0; }
+.badge-severe   { background: rgba(240,79,90,.15);  color: #f04f5a; }
+.badge-moderate { background: rgba(245,158,11,.15); color: #f59e0b; }
+.badge-mild     { background: rgba(34,197,94,.15);  color: #22c55e; }
+.badge-positive { background: rgba(34,197,94,.2);   color: #22c55e; }
+.sidebar-note { background: rgba(93,106,240,.07); border: 1px solid rgba(93,106,240,.18);
+  border-radius: 7px; padding: 10px 11px; font-size: 11px; color: var(--muted); line-height: 1.55; }
+.sidebar-note strong { color: var(--text); }
+
+.main { padding: 20px; display: flex; flex-direction: column; gap: 18px; overflow: auto; }
+.panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+.panel-title { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.panel-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Allocation editor */
+.alloc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.alloc-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: var(--card2); border: 1px solid var(--border); border-radius: 8px; transition: border-color .15s; }
+.alloc-row:focus-within { border-color: var(--accent); }
+.alloc-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.alloc-label { font-size: 12px; font-weight: 500; color: var(--text); flex: 1; min-width: 0; }
+.alloc-input-wrap { display: flex; align-items: center; background: var(--bg);
+  border: 1px solid var(--border2); border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+.alloc-prefix { padding: 4px 5px 4px 8px; font-size: 12px; color: var(--muted);
+  border-right: 1px solid var(--border2); }
+.alloc-input { width: 82px; padding: 4px 8px; background: transparent; border: none;
+  color: var(--text); font-size: 12px; font-weight: 600; text-align: right; font-family: inherit; }
+.alloc-input:focus { outline: none; }
+.alloc-pct { font-size: 11px; font-weight: 600; color: var(--accent-light);
+  background: rgba(93,106,240,.12); border-radius: 5px; padding: 2px 6px;
+  flex-shrink: 0; min-width: 42px; text-align: center; }
+.alloc-footer { display: flex; align-items: center; justify-content: space-between;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.alloc-footer-label { font-size: 12px; color: var(--muted); }
+.alloc-total { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -.02em; }
+
+/* Charts */
+.chart-wrap { position: relative; }
+.empty-state { display: flex; flex-direction: column; align-items: center;
+  justify-content: center; height: 100%; gap: 10px; color: var(--faint); }
+.empty-state svg { width: 40px; height: 40px; opacity: .45; }
+.empty-state p { font-size: 12px; }
+.chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* Metrics */
+.metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.metrics-grid.single { grid-template-columns: minmax(0, 420px); justify-content: center; }
+.metric-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.metric-header { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.metric-cdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.metric-big { font-size: 32px; font-weight: 900; letter-spacing: -.03em; line-height: 1; }
+.metric-big.neg { color: var(--red); }
+.metric-big.pos { color: var(--green); }
+.metric-sublabel { font-size: 10px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .06em; }
+.metric-divider { height: 1px; background: var(--border); margin: 10px 0; }
+.metric-rows { display: flex; flex-direction: column; gap: 5px; }
+.mrow { display: flex; justify-content: space-between; align-items: baseline; }
+.mrow-label { font-size: 11px; color: var(--muted); }
+.mrow-value { font-size: 12px; font-weight: 600; color: var(--text); }
+.mrow-value.red { color: var(--red); }
+.mrow-value.grn { color: var(--green); }
+.metric-quality { font-size: 10px; color: var(--faint); margin-top: 6px; }
+
+/* Detail panel */
+.detail-panel { border-left-width: 3px; border-left-style: solid; }
+.detail-panel p { font-size: 12px; color: var(--muted); line-height: 1.75; }
+.detail-pills { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.detail-pill { background: var(--card2); border: 1px solid var(--border2);
+  border-radius: 20px; padding: 3px 11px; font-size: 11px; color: var(--muted); }
+.detail-pill strong { color: var(--text); }
+
+/* Table */
+table { width: 100%; border-collapse: collapse; }
+thead th { padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700;
+  color: var(--faint); text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); }
+tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: rgba(255,255,255,.015); }
+.cell-rec { display: flex; align-items: center; gap: 7px; }
+.cell-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.cell-neg { color: var(--red); font-weight: 700; }
+.cell-pos { color: var(--green); font-weight: 700; }
+.cell-muted { color: var(--muted); }
+
+/* Preset definitions */
+.presets-panel { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px 24px; }
+.presets-panel h2 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 18px;
+  letter-spacing: -.01em; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.presets-def-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.preset-def-card { background: var(--card); border: 1px solid var(--border);
+  border-radius: 9px; padding: 14px 16px; }
+.preset-def-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.preset-def-tag  { font-size: 10px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+.preset-def-rows { display: flex; flex-direction: column; gap: 4px; }
+.preset-def-row  { display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; }
+.preset-def-label { color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.preset-def-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.preset-def-pct  { font-weight: 600; color: var(--text); }
+.preset-def-pct.zero { color: var(--faint); }
+.preset-def-divider { height: 1px; background: var(--border); margin: 6px 0; }
+.preset-group-label { font-size: 9px; font-weight: 700; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .09em; margin: 8px 0 4px; }
+@media (max-width: 768px) {
+  .presets-def-grid { grid-template-columns: 1fr 1fr; }
+  .presets-panel { padding: 16px; }
+}
+
+/* Methodology section */
+.method-panel { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px 24px; }
+.method-panel h2 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 18px;
+  letter-spacing: -.01em; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.method-section h3 { font-size: 11px; font-weight: 700; color: var(--accent-light);
+  text-transform: uppercase; letter-spacing: .09em; margin-bottom: 9px; }
+.method-section p, .method-section li { font-size: 12px; color: var(--muted); line-height: 1.75; }
+.method-section ul { padding-left: 14px; display: flex; flex-direction: column; gap: 5px; }
+.method-section li strong { color: var(--text); }
+.method-corrections { list-style: none; padding-left: 0; }
+.method-corrections li { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0;
+  border-bottom: 1px solid var(--border); }
+.method-corrections li:last-child { border-bottom: none; }
+.corr-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+  flex-shrink: 0; margin-top: 2px; }
+.corr-before { background: rgba(240,79,90,.15); color: #f04f5a; }
+.corr-after  { background: rgba(34,197,94,.15);  color: #22c55e; }
+.proxy-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.proxy-table th { text-align: left; font-size: 10px; font-weight: 700; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .07em; padding: 5px 8px;
+  border-bottom: 1px solid var(--border); }
+.proxy-table td { padding: 7px 8px; font-size: 12px; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; }
+.proxy-table td:first-child { color: var(--text); font-weight: 500; white-space: nowrap; }
+.proxy-table td:nth-child(2) { color: var(--accent-light); white-space: nowrap; }
+.method-full { grid-column: 1 / -1; }
+.corrections-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.corr-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.corr-card .corr-name { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.corr-card .corr-change { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.corr-card .corr-change span { font-size: 11px; font-weight: 600; }
+.corr-card .corr-reason { font-size: 10px; color: var(--muted); line-height: 1.55; }
+.method-warn { background: rgba(245,158,11,.07); border: 1px solid rgba(245,158,11,.2);
+  border-radius: 7px; padding: 10px 13px; font-size: 11px; color: var(--muted); line-height: 1.65;
+  margin-top: 16px; }
+.method-warn strong { color: #f59e0b; }
+@media (max-width: 768px) {
+  .method-grid { grid-template-columns: 1fr; }
+  .corrections-grid { grid-template-columns: 1fr; }
+  .method-panel { padding: 16px; }
+}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+.sidebar-group { display: flex; flex-direction: column; gap: 4px; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Mobile */
+@media (max-width: 768px) {
+  body { overflow-x: hidden; }
+  header { padding: 10px 14px; }
+  .header-stats { display: none; }
+  .layout { grid-template-columns: 1fr; min-height: auto; overflow-x: hidden; }
+
+  /* Sidebar: 2-column grid so each label stays paired with its toggle */
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 10px 12px;
+    gap: 8px;
+    overflow: hidden;
+    min-width: 0;
+  }
+  /* Each sidebar-group (label+toggle pair) occupies one grid cell */
+  .sidebar-group { gap: 5px; }
+  .sidebar-group .sidebar-label { font-size: 9px; }
+  /* Full-width items: standalone labels, preset grid, buttons, rec list */
+  .sidebar > .sidebar-label,
+  .sidebar > .preset-grid,
+  .sidebar > .btn-row,
+  .sidebar > .rec-list,
+  .sidebar > .sidebar-note { grid-column: 1 / -1; }
+  .sidebar > .sidebar-note { display: none; }
+  /* Smaller mode buttons to fit two per group cell */
+  .mode-btn { font-size: 10px; padding: 5px 5px; }
+
+  /* Recession list: horizontal scroll strip */
+  .rec-list {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+  .rec-list::-webkit-scrollbar { display: none; }
+  .rec-item { flex-shrink: 0; }
+  .rec-info .rec-period { display: none; }
+
+  /* Main content */
+  .main { padding: 10px; gap: 12px; overflow-x: hidden; min-width: 0; }
+  .panel { padding: 12px; }
+
+  /* Allocation rows: tighter sizing so labels don't get pushed off screen */
+  .alloc-cols { grid-template-columns: 1fr; }
+  .alloc-row { padding: 8px 10px; gap: 8px; }
+  .alloc-input { width: 68px; padding: 4px 6px; }
+  .alloc-prefix { padding: 4px 4px 4px 7px; }
+  .alloc-pct { min-width: 36px; padding: 2px 4px; font-size: 10px; }
+
+  /* Charts */
+  .chart-grid-2 { grid-template-columns: 1fr; }
+  .chart-wrap[style*="height:320px"] { height: 240px !important; }
+  .chart-wrap[style*="height:290px"] { height: 210px !important; }
+
+  /* Metrics */
+  .metrics-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .metric-big { font-size: 26px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <h1><em>Recession Simulator</em></h1>
+    <p>Shiller-verified data · Adjust allocation · Select recessions to compare</p>
+  </div>
+  <div class="header-stats">
+    <div class="hstat">
+      <div class="hstat-label">Portfolio Value</div>
+      <div class="hstat-value dyn" id="headerTotal">$1,000,000</div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-group">
+      <div class="sidebar-label">View</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-absolute" onclick="setMode('absolute')" title="Show your portfolio's actual dollar value at each point during the recession and recovery">$ Value</button>
+        <button class="mode-btn" id="btn-indexed" onclick="setMode('indexed')" title="Show how much your portfolio has gained or lost as a percentage from the pre-recession peak — useful for comparing recessions of different sizes">% Change</button>
+      </div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-label">Returns</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-nominal" onclick="setRealMode(false)" title="Raw, unadjusted returns — the numbers as they appeared at the time, without accounting for inflation">Nominal</button>
+        <button class="mode-btn" id="btn-real" onclick="setRealMode(true)" title="Returns adjusted for inflation — shows what your money was actually worth in purchasing power. Especially impactful for the high-inflation recessions of the 1970s and early 1980s">Real</button>
+      </div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-label">Income</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-price" onclick="setDivMode(false)" title="Tracks price movement only — how much the asset went up or down in market value, with no dividend income included">Price Ret.</button>
+        <button class="mode-btn" id="btn-total" onclick="setDivMode(true)" title="Adds dividend income on top of price movement (total return). Dividends were much higher in earlier decades — e.g. ~5.5% yields in the 1930s vs ~1.5% in 2001">+Dividends</button>
+      </div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-label">Scale</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-linear" onclick="setLogScale(false)" title="Standard linear Y-axis — best when recessions are similar in magnitude">Linear</button>
+        <button class="mode-btn" id="btn-log" onclick="setLogScale(true)" title="Logarithmic Y-axis — use when outliers (like the Great Depression) compress other lines into a flat band">Log</button>
+      </div>
+    </div>
+    <div class="sidebar-label">Presets</div>
+    <div class="preset-grid">
+      <button class="btn btn-preset" title="20% equity, 60% fixed income, 20% real assets/cash" onclick="setPreset('conservative')">Conservative</button>
+      <button class="btn btn-preset" title="60% equity, 30% bonds, 10% real assets" onclick="setPreset('balanced')">Balanced</button>
+      <button class="btn btn-preset" title="85% equity, 5% bonds, 10% alts" onclick="setPreset('aggressive')">Aggressive</button>
+      <button class="btn btn-preset" title="100% spread across equity asset classes" onclick="setPreset('allEquity')">All Equity</button>
+    </div>
+    <div class="sidebar-label">Recessions</div>
+    <div class="btn-row">
+      <button class="btn btn-full" onclick="selectAll()">Select All</button>
+      <button class="btn btn-full" onclick="clearAll()">Clear All</button>
+    </div>
+    <div class="rec-list" id="recList"></div>
+    <div class="sidebar-note">
+      S&amp;P 500 figures verified against Bloomberg / Winthrop Wealth bear market tables and Shiller data. See full methodology at the bottom of the page.
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- Allocation editor -->
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Portfolio Allocation</div>
+          <div class="panel-sub">Edit any value — all charts update instantly</div>
+        </div>
+        <button class="btn" onclick="resetAlloc()">↺ Reset to default</button>
+      </div>
+      <div class="alloc-cols" id="allocGrid"></div>
+      <div class="alloc-footer">
+        <span class="alloc-footer-label">Total Portfolio Value</span>
+        <span class="alloc-total" id="allocTotal">$1,000,000</span>
+      </div>
+    </div>
+
+    <!-- Main chart -->
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Portfolio Value Through Recession &amp; Recovery</div>
+          <div class="panel-sub" id="chartSub">Select a recession in the sidebar to begin</div>
+        </div>
+      </div>
+      <div class="chart-wrap" style="height:320px;">
+        <div class="empty-state" id="emptyState">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 14l6-6 4 4 8-8M21 4h-6M21 4v6"/><path d="M3 21h18"/>
+          </svg>
+          <p>Select one or more recessions from the sidebar</p>
+        </div>
+        <canvas id="mainChart" style="display:none;"></canvas>
+      </div>
+    </div>
+
+    <!-- Recession detail (single selection) -->
+    <div id="detailPanel" style="display:none;"></div>
+
+    <!-- Metrics -->
+    <div class="metrics-grid" id="metricsGrid"></div>
+
+    <!-- Asset breakdown + donut -->
+    <div class="chart-grid-2">
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:14px;">Dollar Impact by Asset Class</div>
+        <div class="chart-wrap" style="height:290px;"><canvas id="assetChart"></canvas></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:10px;">
+          Shows first selected recession. Hover sidebar to preview.
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title" style="margin-bottom:14px;">Current Allocation</div>
+        <div class="chart-wrap" style="height:290px;"><canvas id="donutChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Comparison table -->
+    <div class="panel" id="compTable" style="display:none;">
+      <div class="panel-title" style="margin-bottom:14px;">Recession Comparison</div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Recession</th><th>Period</th><th>Duration</th>
+            <th>Your Drawdown</th><th>Dollar Impact</th><th>Recovery</th><th>S&amp;P 500</th>
+          </tr></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Preset definitions -->
+    <div class="presets-panel">
+      <h2>Portfolio Preset Definitions</h2>
+      <div class="presets-def-grid">
+
+        <!-- Conservative -->
+        <div class="preset-def-card">
+          <div class="preset-def-name">Conservative</div>
+          <div class="preset-def-tag">Capital preservation — 20% equity, 60% fixed income, 20% real assets &amp; cash. Designed to weather downturns with minimal drawdown at the cost of lower long-run growth.</div>
+          <div class="preset-group-label">Equity — 20%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">10%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">3%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">2%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">2.5%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">2.5%</span></div>
+          </div>
+          <div class="preset-group-label">Fixed Income — 60%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#3b82f6"></span>Bonds</span><span class="preset-def-pct">45%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#06b6d4"></span>CDs</span><span class="preset-def-pct">15%</span></div>
+          </div>
+          <div class="preset-group-label">Real Assets &amp; Cash — 20%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f59e0b"></span>REIT</span><span class="preset-def-pct">5%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#eab308"></span>Gold &amp; Silver</span><span class="preset-def-pct">5%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#64748b"></span>Cash &amp; Savings</span><span class="preset-def-pct">10%</span></div>
+          </div>
+        </div>
+
+        <!-- Balanced -->
+        <div class="preset-def-card">
+          <div class="preset-def-name">Balanced</div>
+          <div class="preset-def-tag">Classic 60/40 variant — 60% equity, 30% fixed income, 10% real assets. The traditional moderate-risk benchmark used by pension funds and target-date funds.</div>
+          <div class="preset-group-label">Equity — 60%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">30%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">10%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">5%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">7.5%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">7.5%</span></div>
+          </div>
+          <div class="preset-group-label">Fixed Income — 30%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#3b82f6"></span>Bonds</span><span class="preset-def-pct">20%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#06b6d4"></span>CDs</span><span class="preset-def-pct">10%</span></div>
+          </div>
+          <div class="preset-group-label">Real Assets &amp; Cash — 10%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f59e0b"></span>REIT</span><span class="preset-def-pct">6%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#eab308"></span>Gold &amp; Silver</span><span class="preset-def-pct">2%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#64748b"></span>Cash &amp; Savings</span><span class="preset-def-pct">2%</span></div>
+          </div>
+        </div>
+
+        <!-- Aggressive -->
+        <div class="preset-def-card">
+          <div class="preset-def-name">Aggressive</div>
+          <div class="preset-def-tag">Growth-oriented — 85% equity, 5% bonds, 10% alternatives. Maximizes long-run expected return with significant exposure to small cap, EM, and crypto volatility.</div>
+          <div class="preset-group-label">Equity — 85%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">35%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">15%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">10%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">15%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">10%</span></div>
+          </div>
+          <div class="preset-group-label">Fixed Income — 5%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#3b82f6"></span>Bonds</span><span class="preset-def-pct">5%</span></div>
+          </div>
+          <div class="preset-group-label">Alternatives — 10%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f59e0b"></span>REIT</span><span class="preset-def-pct">4%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#eab308"></span>Gold &amp; Silver</span><span class="preset-def-pct">3%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f97316"></span>Crypto</span><span class="preset-def-pct">3%</span></div>
+          </div>
+        </div>
+
+        <!-- All Equity -->
+        <div class="preset-def-card">
+          <div class="preset-def-name">All Equity</div>
+          <div class="preset-def-tag">Maximum equity exposure — 100% spread across equity asset classes. No bonds, cash, or alternatives. Historically highest long-run return, and the largest drawdowns.</div>
+          <div class="preset-group-label">Equity — 100%</div>
+          <div class="preset-def-rows">
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">45%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">20%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">10%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">15%</span></div>
+            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">10%</span></div>
+          </div>
+          <div style="font-size:11px;color:var(--faint);margin-top:10px;font-style:italic;">Bonds, CDs, REIT, Gold, Crypto, Cash — all 0%</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Methodology, Data Sources & Limitations -->
+    <div class="method-panel">
+      <h2>⚠ Methodology, Data Sources &amp; Limitations</h2>
+
+      <!-- Corrections -->
+      <div class="method-section" style="margin-bottom:20px;">
+        <h3>Corrections Applied to Source Data</h3>
+        <div class="corrections-grid">
+          <div class="corr-card">
+            <div class="corr-name">1937–38 Recession</div>
+            <div class="corr-change">
+              <span class="corr-badge corr-before">–49%</span>
+              <span style="color:var(--faint)">→</span>
+              <span class="corr-badge corr-after">–54.5%</span>
+            </div>
+            <div class="corr-reason">Bloomberg/Winthrop Wealth bear market tables (Jan 2023) confirm –54.5% from peak Mar 1937 to trough Mar 1938. Earlier –49% figure was an under-estimate.</div>
+          </div>
+          <div class="corr-card">
+            <div class="corr-name">1945 Recession</div>
+            <div class="corr-change">
+              <span class="corr-badge corr-before">–16%</span>
+              <span style="color:var(--faint)">→</span>
+              <span class="corr-badge corr-after">+38%</span>
+            </div>
+            <div class="corr-reason">The only recession in history where equities rose. The S&P gained +38% during Feb–Oct 1945 as markets priced in the end of WWII — making this a unique anomaly in the dataset.</div>
+          </div>
+          <div class="corr-card">
+            <div class="corr-name">1948–49 Recession</div>
+            <div class="corr-change">
+              <span class="corr-badge corr-before">–21%</span>
+              <span style="color:var(--faint)">→</span>
+              <span class="corr-badge corr-after">–14%</span>
+            </div>
+            <div class="corr-reason">The commonly cited –29.6% (Winthrop) measures from the May 1946 post-war peak — a 2.5-year window. The NBER recession itself ran Nov 1948–Oct 1949 and saw ~–14% within that window.</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">
+          Remaining 12 recessions are within 1–2 percentage points of Bloomberg/Winthrop figures. The 1953–54, 1960–61, and 1980 recessions did not trigger formal –20% bear markets; their drawdowns are NBER-window estimates from Shiller's price series.
+        </div>
+      </div>
+
+      <div class="method-grid">
+        <!-- Data sources -->
+        <div class="method-section">
+          <h3>Primary Data Sources</h3>
+          <ul>
+            <li><strong>S&amp;P 500 drawdowns:</strong> Bloomberg bear market tables published by Winthrop Wealth (Jan 2023), cross-referenced with Robert Shiller's long-run S&amp;P 500 price dataset (irrationalexuberance.com).</li>
+            <li><strong>Recession dates:</strong> National Bureau of Economic Research (NBER) official peak/trough dates.</li>
+            <li><strong>Bond returns:</strong> Ibbotson long-term U.S. government bond total return series (1926+); Shiller's 10-year bond yield dataset used to derive pre-Ibbotson estimates.</li>
+            <li><strong>Gold &amp; Silver:</strong> Historical gold prices from Kitco / LBMA London Fix; silver from COMEX records. Gold was fixed at $35/oz under Bretton Woods until the Nixon Shock (Aug 1971), so pre-1971 gold returns are effectively zero.</li>
+            <li><strong>REIT returns:</strong> NAREIT All Equity REITs index (1972+); real estate sector equities used as proxy for earlier periods.</li>
+            <li><strong>International equities:</strong> MSCI EAFE index (1970+); U.S. equity used as a proxy for all pre-1970 periods where no reliable international index exists.</li>
+            <li><strong>CDs:</strong> 3-month U.S. T-bill rate used as proxy throughout (CD rates track T-bills closely). FDIC insurance is assumed, so CDs show no principal loss.</li>
+          </ul>
+        </div>
+
+        <!-- Proxies -->
+        <div class="method-section">
+          <h3>Asset Class Proxies by Era</h3>
+          <table class="proxy-table">
+            <thead><tr><th>Era</th><th>Asset Class</th><th>Proxy Used</th></tr></thead>
+            <tbody>
+              <tr><td>Pre-1960</td><td>REIT</td><td>Real estate sector equities — NAREIT index didn't exist until 1972.</td></tr>
+              <tr><td>Pre-1970</td><td>Developed Markets</td><td>U.S. large cap equity — MSCI EAFE begins Jan 1970.</td></tr>
+              <tr><td>Pre-1970</td><td>Emerging Markets</td><td>U.S. large cap equity — no investable EM benchmark until MSCI EM (1988).</td></tr>
+              <tr><td>Pre-1971</td><td>Gold &amp; Silver</td><td>Near-zero return — gold pegged at $35/oz under Bretton Woods until the Aug 1971 Nixon Shock.</td></tr>
+              <tr><td>Pre-2009</td><td>Crypto</td><td>$0 — Bitcoin launched Jan 3, 2009; all earlier recessions use zero.</td></tr>
+              <tr><td>All eras</td><td>CDs</td><td>3-month T-bill rate — FDIC coverage assumed, so no principal loss is modeled.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Structural limitations -->
+        <div class="method-section method-full">
+          <h3>Structural Limitations</h3>
+          <ul style="columns:2;column-gap:32px;column-rule:1px solid var(--border);">
+            <li><strong>Recovery curves are modeled:</strong> The drawdown phase uses a cubic Hermite (S-curve) and recovery uses a square-root curve. Actual paths were irregular and non-monotonic — this is an approximation.</li>
+            <li><strong>Dividends (user-selectable):</strong> Toggle total return including dividends via the <em>Income</em> control. Yields are era-specific: Large Cap ranged from ~5.5% in 1937–38 to ~1.5% in 2001–02; Bonds from ~2% (WWII era) to ~13% at the 1981–82 Volcker peak; REIT 9–10% in the 1980s to ~4.5% in 2020. Modeled as received-not-reinvested for simplicity.</li>
+            <li><strong>No rebalancing assumed:</strong> Allocation percentages are held fixed throughout each simulation. Systematic rebalancing during a drawdown typically improves long-term results.</li>
+            <li><strong>Nominal vs. real (user-selectable):</strong> Toggle inflation-adjusted values via the <em>Returns</em> control. Real mode deflates each path point by the recession's average CPI. Notable: 1980 (~13.5% CPI), 1973–75 (~9.2%), 1981–82 (~9.4%) — real losses were substantially worse than nominal. The Great Depression used –6.0% (deflation), meaning nominal losses slightly overstated real purchasing-power losses.</li>
+            <li><strong>Correlation simplification:</strong> Portfolio drawdown is the allocation-weighted average of individual asset class returns. Cross-asset contagion (e.g., 2008, when all risk asset correlations spiked to near-1) is not modeled.</li>
+            <li><strong>One trough per recession:</strong> Each recession uses a single peak-to-trough figure. Multi-leg bear markets (e.g., the Dot-com bust had two distinct legs in 2001 and 2002) are collapsed to their aggregate drawdown.</li>
+          </ul>
+          <div class="method-warn">
+            <strong>Not financial advice.</strong> This tool is for educational illustration only. Historical drawdowns varied significantly by sector, geography, and individual security. Your actual portfolio behavior in a recession will differ based on factors not modeled here: taxes, fees, margin calls, sequence-of-returns risk, and behavioral decisions made under stress.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── Portfolio ───────────────────────────────────────
+const BASE = {
+  largeCap:  { label:'Large Cap (US)',    value:400000, color:'#6366f1' },
+  midCap:    { label:'Mid Cap',           value:50000,  color:'#8b5cf6' },
+  smallCap:  { label:'Small Cap',         value:30000,  color:'#a855f7' },
+  emerging:  { label:'Emerging Markets',  value:100000, color:'#22c55e' },
+  developed: { label:'Developed Markets', value:150000, color:'#10b981' },
+  bonds:     { label:'Bonds',             value:200000, color:'#3b82f6' },
+  cds:       { label:'CDs',               value:5000,   color:'#06b6d4' },
+  reit:      { label:'REIT',              value:40000,  color:'#f59e0b' },
+  crypto:    { label:'Crypto',            value:10000,  color:'#f97316' },
+  goldSilver:{ label:'Gold & Silver',     value:15000,  color:'#eab308' },
+  cash:      { label:'Cash & Savings',    value:0,      color:'#64748b' },
+};
+
+// Preset mixes (fractions of total, must sum to 1.0)
+const PRESETS = {
+  conservative: { largeCap:.10, midCap:.03, smallCap:.02, emerging:.025, developed:.025,
+                  bonds:.45,  cds:.15,  reit:.05,  crypto:0, goldSilver:.05,  cash:.10 },
+  balanced:     { largeCap:.30, midCap:.10, smallCap:.05, emerging:.075, developed:.075,
+                  bonds:.20,  cds:.10,  reit:.06,  crypto:0, goldSilver:.02,  cash:.02 },
+  aggressive:   { largeCap:.35, midCap:.15, smallCap:.10, emerging:.15, developed:.10,
+                  bonds:.05,  cds:0,    reit:.04,  crypto:.03, goldSilver:.03, cash:0  },
+  allEquity:    { largeCap:.45, midCap:.20, smallCap:.10, emerging:.15, developed:.10,
+                  bonds:0,    cds:0,    reit:0,    crypto:0, goldSilver:0,    cash:0  },
+};
+
+let ALLOC = cp(BASE);
+function cp(s){ const o={}; for(const[k,v] of Object.entries(s)) o[k]={...v}; return o; }
+function tot(){ return Object.values(ALLOC).reduce((s,a)=>s+a.value,0); }
+function pct(){ const t=tot(); for(const a of Object.values(ALLOC)) a.pct=t>0?a.value/t:0; }
+
+// ─── Recession data (Shiller/Bloomberg verified) ──────
+const RECESSIONS = [
+  { id:'depression', name:'Great Depression', period:'1929–1933', color:'#ef4444',
+    dur:43, rec:264, spx:-86, q:'verified', inf:-6.0,
+    note:'The DJIA/S&P fell ~86% from peak to trough. Bloomberg verified. Recovery to pre-crash nominal levels took until 1954.',
+    d:{ largeCap:-86,midCap:-88,smallCap:-89,emerging:-86,developed:-86,bonds:20,cds:0,reit:-80,crypto:0,goldSilver:0,cash:8 },
+    dy:{ largeCap:5.0,midCap:4.5,smallCap:4.5,emerging:4.0,developed:4.0,bonds:4.0,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1937', name:'1937–38 Recession', period:'1937–1938', color:'#f97316',
+    dur:13, rec:60, spx:-54.5, q:'verified', inf:3.5,
+    note:'Bloomberg verified: –54.5% peak Mar 1937 to trough Mar 1938. Caused by premature Fed tightening after only a partial Depression recovery — a cautionary tale about withdrawing stimulus too soon.',
+    d:{ largeCap:-54,midCap:-58,smallCap:-60,emerging:-54,developed:-54,bonds:3,cds:0,reit:-50,crypto:0,goldSilver:0,cash:2 },
+    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:2.5,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1945', name:'1945 Recession', period:'1945', color:'#22c55e',
+    dur:8, rec:18, spx:38, q:'verified', inf:2.3,
+    note:'The only recession in history where equities rose. The S&P gained +38% during Feb–Oct 1945 as markets priced in the end of WWII. Post-war normalization and demand shifts caused the actual NBER-defined recession, but investors were already looking forward.',
+    d:{ largeCap:38,midCap:34,smallCap:30,emerging:20,developed:25,bonds:-2,cds:0,reit:22,crypto:0,goldSilver:0,cash:0 },
+    dy:{ largeCap:4.5,midCap:4.0,smallCap:4.0,emerging:3.5,developed:3.5,bonds:2.0,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1948', name:'1948–49 Recession', period:'1948–1949', color:'#84cc16',
+    dur:11, rec:10, spx:-14, q:'proxy', inf:3.0,
+    note:'The NBER recession window (Nov 1948–Oct 1949) saw ~–14% in equities. The often-cited –29.6% figure measures from the May 1946 post-war peak — a much longer window. Post-war economic normalization after wartime stimulus ended.',
+    d:{ largeCap:-14,midCap:-16,smallCap:-18,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
+    dy:{ largeCap:6.0,midCap:5.5,smallCap:5.5,emerging:5.0,developed:5.0,bonds:2.5,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1953', name:'1953–54 Recession', period:'1953–1954', color:'#10b981',
+    dur:10, rec:12, spx:-14, q:'proxy', inf:0.4,
+    note:'Did not reach the –20% bear market threshold. A mild ~–14% decline driven by post-Korean War defense spending cuts and inventory correction. One of the mildest recessions in modern history.',
+    d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
+    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:3.0,cds:0,reit:5.5,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1957', name:'1957–58 Recession', period:'1957–1958', color:'#14b8a6',
+    dur:3, rec:9, spx:-20.7, q:'verified', inf:2.9,
+    note:'Bloomberg verified: –20.7% peak Jul 1957 to trough Oct 1957. Eisenhower-era Fed tightening to fight inflation, combined with a drop in auto sales and a brief Sputnik-era economic shock.',
+    d:{ largeCap:-21,midCap:-23,smallCap:-26,emerging:-21,developed:-21,bonds:4,cds:0,reit:-18,crypto:0,goldSilver:0,cash:1 },
+    dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:3.5,cds:0,reit:5.5,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1960', name:'1960–61 Recession', period:'1960–1961', color:'#06b6d4',
+    dur:10, rec:11, spx:-14, q:'proxy', inf:1.4,
+    note:'Did not reach –20% bear market threshold. A brief Kennedy-era recession caused by tight monetary policy and a balance-of-payments deficit. The economy recovered quickly under the Kennedy stimulus program.',
+    d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:4,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
+    dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:4.0,cds:0,reit:6.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1969', name:'1969–70 Recession', period:'1969–1970', color:'#3b82f6',
+    dur:18, rec:9, spx:-35.4, q:'verified', inf:5.6,
+    note:'Bloomberg verified: –35.4% peak Nov 1968 to trough May 1970. Rising inflation eroded fixed income returns. The Bretton Woods system was under stress, and Nixon would eventually end dollar-gold convertibility in 1971.',
+    d:{ largeCap:-35,midCap:-40,smallCap:-45,emerging:-35,developed:-35,bonds:-3,cds:0,reit:-30,crypto:0,goldSilver:5,cash:-2 },
+    dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:6.5,cds:0,reit:6.5,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1973', name:'Oil Crisis / Stagflation', period:'1973–1975', color:'#6366f1',
+    dur:21, rec:21, spx:-48.2, q:'verified', inf:9.2,
+    note:'Bloomberg verified: –48.2% peak Jan 1973 to trough Oct 1974. The OPEC oil embargo triggered stagflation — simultaneous high inflation and recession. Gold surged ~70% after Nixon ended dollar-gold convertibility. Bonds and cash were both hurt by inflation.',
+    d:{ largeCap:-48,midCap:-52,smallCap:-55,emerging:-45,developed:-45,bonds:-5,cds:2,reit:-42,crypto:0,goldSilver:70,cash:-5 },
+    dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:7.5,cds:0,reit:8.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1980', name:'1980 Recession', period:'1980', color:'#8b5cf6',
+    dur:6, rec:8, spx:-17, q:'proxy', inf:13.5,
+    note:'The specific Jan–Jul 1980 NBER window saw ~–17% before the market temporarily recovered. Fed Chairman Volcker\'s aggressive rate hikes to break inflation caused sharp but brief pain. Gold had already peaked in Jan 1980 at $850/oz and fell sharply.',
+    d:{ largeCap:-17,midCap:-20,smallCap:-23,emerging:-17,developed:-17,bonds:-12,cds:3,reit:-15,crypto:0,goldSilver:-30,cash:-3 },
+    dy:{ largeCap:5.0,midCap:4.5,smallCap:4.5,emerging:4.0,developed:4.0,bonds:10.0,cds:0,reit:9.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1981', name:'1981–82 Recession', period:'1981–1982', color:'#a855f7',
+    dur:21, rec:15, spx:-27.1, q:'verified', inf:9.4,
+    note:'Bloomberg verified: –27.1% peak Nov 1980 to trough Aug 1982. The Volcker Shock — sustained high interest rates to break the inflation cycle — caused a severe recession. Bonds rallied strongly as inflation expectations fell and rates began dropping.',
+    d:{ largeCap:-27,midCap:-30,smallCap:-30,emerging:-27,developed:-27,bonds:10,cds:4,reit:-22,crypto:0,goldSilver:-30,cash:-2 },
+    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:13.0,cds:0,reit:10.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r1990', name:'Gulf War Recession', period:'1990–1991', color:'#ec4899',
+    dur:8, rec:4, spx:-20, q:'proxy', inf:4.6,
+    note:'~–20% peak-to-trough (Jul–Oct 1990). The Savings & Loan crisis devastated REITs and commercial real estate. Oil price spike from the Gulf War rattled consumer confidence. A relatively quick recovery once the war ended and oil prices normalized.',
+    d:{ largeCap:-20,midCap:-24,smallCap:-30,emerging:-25,developed:-22,bonds:9,cds:2,reit:-28,crypto:0,goldSilver:-5,cash:1 },
+    dy:{ largeCap:3.5,midCap:3.0,smallCap:3.0,emerging:3.5,developed:3.5,bonds:8.5,cds:0,reit:7.5,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r2001', name:'Dot-com Bust', period:'2001–2002', color:'#f43f5e',
+    dur:31, rec:56, spx:-49.1, q:'verified', inf:2.8,
+    note:'Bloomberg verified: –49.1% peak Mar 2000 to trough Oct 2002. The NASDAQ fell nearly 80%. REITs (+15%) and bonds (+12%) were standout safe havens as investors fled growth stocks. Gold began a multi-year bull run. Compounded by 9/11 and corporate accounting scandals.',
+    d:{ largeCap:-49,midCap:-42,smallCap:-35,emerging:-30,developed:-45,bonds:12,cds:2,reit:15,crypto:0,goldSilver:10,cash:2 },
+    dy:{ largeCap:1.5,midCap:1.2,smallCap:1.2,emerging:2.0,developed:2.0,bonds:5.5,cds:0,reit:7.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r2008', name:'Great Recession', period:'2007–2009', color:'#fb923c',
+    dur:17, rec:48, spx:-56.8, q:'verified', inf:2.5,
+    note:'Bloomberg verified: –56.8% peak Oct 2007 to trough Mar 2009. The housing and credit crisis spread globally. REITs collapsed –68%. Emerging markets fell even harder than the US. Gold (+25%) and US Treasuries provided the only meaningful cushion.',
+    d:{ largeCap:-57,midCap:-60,smallCap:-60,emerging:-65,developed:-58,bonds:5,cds:1,reit:-68,crypto:0,goldSilver:25,cash:2 },
+    dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:4.5,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+
+  { id:'r2020', name:'COVID-19 Crash', period:'2020', color:'#64748b',
+    dur:1, rec:5, spx:-33.9, q:'verified', inf:1.2,
+    note:'Bloomberg verified: –33.9% peak Feb 2020 to trough Mar 2020 — the fastest bear market on record at just 33 days. Also the fastest recovery in history. Crypto fell –50% initially, then surged to new highs. Massive fiscal and monetary stimulus drove the rapid rebound.',
+    d:{ largeCap:-34,midCap:-40,smallCap:-42,emerging:-32,developed:-34,bonds:8,cds:1,reit:-42,crypto:-50,goldSilver:12,cash:1 },
+    dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:2.0,cds:0,reit:4.5,crypto:0,goldSilver:0,cash:0 } },
+];
+
+// ─── State ────────────────────────────────────────────
+let selected = new Set(), chartMode = 'absolute', realMode = false, divMode = false, logScale = false;
+let mainCh = null, assetCh = null, donutCh = null;
+
+// ─── Allocation editor ────────────────────────────────
+function renderEditor() {
+  pct();
+  document.getElementById('allocGrid').innerHTML = Object.entries(ALLOC).map(([k,a]) => `
+    <div class="alloc-row">
+      <div class="alloc-dot" style="background:${a.color}"></div>
+      <div class="alloc-label">${a.label}</div>
+      <div class="alloc-input-wrap">
+        <span class="alloc-prefix">$</span>
+        <input class="alloc-input" type="number" min="0" step="1000" value="${Math.round(a.value)}"
+          oninput="onInput('${k}',this.value)" onchange="onInput('${k}',this.value)">
+      </div>
+      <div class="alloc-pct" id="pct-${k}">${(a.pct*100).toFixed(1)}%</div>
+    </div>`).join('');
+  fmtTot(tot());
+}
+function onInput(k, v) {
+  ALLOC[k].value = Math.max(0, parseFloat(v)||0);
+  pct();
+  Object.keys(ALLOC).forEach(key => {
+    const el = document.getElementById('pct-'+key);
+    if(el) el.textContent = (ALLOC[key].pct*100).toFixed(1)+'%';
+  });
+  fmtTot(tot());
+  refreshAll();
+}
+function fmtTot(t) {
+  const s='$'+Math.round(t).toLocaleString();
+  document.getElementById('allocTotal').textContent=s;
+  document.getElementById('headerTotal').textContent=s;
+}
+function resetAlloc() { ALLOC=cp(BASE); renderEditor(); refreshAll(); }
+function setPreset(name) {
+  const mix=PRESETS[name], t=tot();
+  Object.entries(mix).forEach(([k,p]) => { ALLOC[k].value = t * p; });
+  renderEditor(); refreshAll();
+  document.querySelectorAll('.alloc-row').forEach(el => {
+    el.classList.remove('flashed');
+    void el.offsetWidth; // force reflow so animation restarts
+    el.classList.add('flashed');
+  });
+}
+function refreshAll() {
+  renderMainChart(); updateDonut();
+  const f=RECESSIONS.find(r=>selected.has(r.id));
+  if(f) renderAssetChart(f);
+}
+
+// ─── Calculations ─────────────────────────────────────
+function dd(r) { pct(); return Object.entries(ALLOC).reduce((s,[k,a])=>s+a.pct*(r.d[k]??0),0); }
+function contribs(r) {
+  pct();
+  return Object.entries(ALLOC).map(([k,a])=>({
+    label:a.label,color:a.color,
+    dollarImpact:a.value*((r.d[k]??0)/100),
+    contribution:a.pct*(r.d[k]??0),
+  })).sort((a,b)=>a.contribution-b.contribution);
+}
+function makePath(r, mode, real, divs) {
+  const t=tot(), d=dd(r), trough=t*(1+d/100), pts=[];
+  const nomEnd=r.dur+r.rec;
+  // In real mode, extend only when the 7% nominal growth assumption outpaces inflation.
+  // High-inflation recessions (e.g. 1980 at 13.5%) can't recover at 7% nominal — don't extend.
+  const canRecover=real && r.inf < 7;
+  const limit=canRecover ? nomEnd+180 : nomEnd;
+  for(let m=0;m<=limit;m++){
+    let raw;
+    if(m<=r.dur){
+      const e=r.dur===0?1:m/r.dur, s=e*e*(3-2*e);
+      raw=t+(trough-t)*s;
+    } else if(m<=nomEnd) {
+      raw=trough+(t-trough)*Math.sqrt((m-r.dur)/r.rec);
+    } else {
+      raw=t*Math.pow(1.07,(m-nomEnd)/12);
+    }
+    let val=raw;
+    if(divs) val+=Object.entries(ALLOC).reduce((sum,[k,a])=>sum+a.value*((r.dy[k]||0)/100)*(m/12),0);
+    if(real) val/=Math.pow(1+r.inf/100,m/12);
+    pts.push(mode==='indexed'?((val/t)-1)*100:val);
+    if(canRecover && m>nomEnd){
+      const v=pts[pts.length-1];
+      if(mode==='indexed' ? v>=0 : v>=t) break;
+    }
+  }
+  return pts;
+}
+
+// ─── Sidebar ──────────────────────────────────────────
+function badge(spx) {
+  if(spx>=20) return ['Positive','badge-positive'];
+  if(spx<=-40) return ['Severe','badge-severe'];
+  if(spx<=-25) return ['Moderate','badge-moderate'];
+  return ['Mild','badge-mild'];
+}
+function renderSidebar() {
+  document.getElementById('recList').innerHTML = RECESSIONS.map(r=>{
+    const[lbl,cls]=badge(r.spx);
+    return `<div class="rec-item ${selected.has(r.id)?'active':''}"
+      onclick="tog('${r.id}')" onmouseenter="hov('${r.id}')" onmouseleave="hov(null)">
+      <div class="rec-dot" style="background:${r.color}"></div>
+      <div class="rec-info"><div class="rec-name">${r.name}</div><div class="rec-period">${r.period}</div></div>
+      <span class="rec-badge ${cls}">${lbl}</span>
+    </div>`;
+  }).join('');
+}
+
+// ─── Detail panel ─────────────────────────────────────
+function renderDetailPanel(r) {
+  const el=document.getElementById('detailPanel');
+  if(!r){ el.style.display='none'; el.innerHTML=''; return; }
+  const recStr = r.rec>=240 ? (r.rec/12).toFixed(0)+' years' : r.rec+' months';
+  el.style.display='block';
+  el.innerHTML=`<div class="panel detail-panel" style="border-left-color:${r.color}">
+    <div class="panel-title" style="color:${r.color};margin-bottom:10px;">${r.name}</div>
+    <p>${r.note}</p>
+    <div class="detail-pills">
+      <span class="detail-pill">Downturn: <strong>${r.dur} months</strong></span>
+      <span class="detail-pill">Recovery: <strong>${recStr}</strong></span>
+      <span class="detail-pill">S&amp;P 500: <strong style="color:${r.spx>0?'var(--green)':'var(--red)'}">${r.spx>0?'+':''}${r.spx}%</strong></span>
+    </div>
+  </div>`;
+}
+
+// ─── Main chart ───────────────────────────────────────
+function renderMainChart() {
+  const canvas=document.getElementById('mainChart'), empty=document.getElementById('emptyState');
+  if(selected.size===0){
+    canvas.style.display='none'; empty.style.display='flex';
+    document.getElementById('metricsGrid').innerHTML='';
+    document.getElementById('compTable').style.display='none';
+    renderDetailPanel(null);
+    return;
+  }
+  canvas.style.display='block'; empty.style.display='none';
+  const recs=RECESSIONS.filter(r=>selected.has(r.id));
+  let maxM=0;
+  const datasets=recs.map(r=>{
+    const path=makePath(r,chartMode,realMode,divMode);
+    const m=path.length-1; if(m>maxM) maxM=m;
+    return { label:r.name, data:path.map((v,i)=>({x:i,y:v})),
+      borderColor:r.color, backgroundColor:r.color+'15',
+      borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:0.4, fill:chartMode==='indexed' };
+  });
+  if(chartMode==='indexed') datasets.push({
+    label:'Baseline', data:Array.from({length:maxM+1},(_,i)=>({x:i,y:0})),
+    borderColor:'#ffffff18', borderWidth:1, borderDash:[5,5], pointRadius:0, fill:false });
+
+  const modeTag=[realMode?'Real':'',divMode?'+Div':''].filter(Boolean).join(' ');
+  document.getElementById('chartSub').textContent = (recs.length===1
+    ? `${recs[0].name} · ${maxM} months total`
+    : `${recs.length} recessions compared`) + (modeTag ? ` · ${modeTag}` : '');
+
+  if(mainCh) mainCh.destroy();
+  mainCh = new Chart(canvas,{type:'line',data:{datasets},options:{
+    responsive:true,maintainAspectRatio:false,animation:{duration:250},
+    interaction:{mode:'index',intersect:false},
+    scales:{
+      x:{type:'linear',
+        title:{display:true,text:'Months from Recession Start',color:'#7a8499',font:{size:11}},
+        ticks:{color:'#7a8499',stepSize:12,callback:v=>v%12===0?`Yr ${v/12}`:null},
+        grid:{color:'#1a1d2b'}},
+      y:{type:logScale&&chartMode==='absolute'?'logarithmic':'linear',
+        title:{display:true,
+          text:chartMode==='indexed'?'% Change from Pre-Recession':'Portfolio Value ($)',
+          color:'#7a8499',font:{size:11}},
+        ticks:{color:'#7a8499',callback:v=>chartMode==='indexed'?v.toFixed(0)+'%':
+          v>=1000000?'$'+(v/1000000).toFixed(1)+'M':'$'+(v/1000).toFixed(0)+'K'},
+        grid:{color:'#1a1d2b'}},
+    },
+    plugins:{
+      legend:{labels:{color:'#e4e8f0',font:{size:11},boxWidth:10,padding:14}},
+      tooltip:{backgroundColor:'#13151f',borderColor:'#272b3d',borderWidth:1,
+        titleColor:'#e4e8f0',bodyColor:'#7a8499',padding:10,
+        callbacks:{
+          title:items=>`Month ${items[0].parsed.x}`,
+          label:item=>{
+            if(item.dataset.label==='Baseline') return null;
+            const v=item.parsed.y;
+            return chartMode==='indexed'?` ${item.dataset.label}: ${v.toFixed(1)}%`:` ${item.dataset.label}: $${Math.round(v).toLocaleString()}`;
+          }
+        }
+      }
+    }
+  }});
+  renderDetailPanel(recs.length===1 ? recs[0] : null);
+  renderMetrics(recs); renderTable(recs);
+  if(recs.length>0) renderAssetChart(recs[0]);
+}
+
+// ─── Metrics ──────────────────────────────────────────
+const qLabel={verified:'✓ Verified — Winthrop/Bloomberg data',proxy:'~ Proxy estimate',good:'✓ Good data'};
+function renderMetrics(recs) {
+  const t=tot();
+  const grid=document.getElementById('metricsGrid');
+  grid.classList.toggle('single', recs.length===1);
+  const sublabel = realMode&&divMode ? 'Real Total Return' : realMode ? 'Real (Inflation-Adjusted)' : divMode ? 'Total Return (w/ Dividends)' : 'Estimated Portfolio';
+  grid.innerHTML=recs.map(r=>{
+    const troughVal=makePath(r,'absolute',realMode,divMode)[r.dur];
+    const d=((troughVal/t)-1)*100, impact=troughVal-t, isPos=d>0;
+    // Best/worst by dollar impact (not raw %) among non-zero positions — price-return basis
+    const active=Object.entries(r.d)
+      .filter(([k])=>ALLOC[k]&&ALLOC[k].value>0)
+      .map(([k,p])=>({label:ALLOC[k].label, pct:p, dollar:ALLOC[k].value*(p/100)}))
+      .sort((a,b)=>b.dollar-a.dollar);
+    const best=active[0], worst=active[active.length-1];
+    return `<div class="metric-card">
+      <div class="metric-header"><div class="metric-cdot" style="background:${r.color}"></div>${r.name}</div>
+      <div class="metric-big ${isPos?'pos':'neg'}">${d>=0?'+':''}${d.toFixed(1)}%</div>
+      <div class="metric-sublabel">${sublabel} ${isPos?'Gain':'Drawdown'}</div>
+      <div class="metric-divider"></div>
+      <div class="metric-rows">
+        <div class="mrow"><span class="mrow-label">Dollar impact</span>
+          <span class="mrow-value ${isPos?'grn':'red'}">${isPos?'+':'–'}$${Math.abs(Math.round(impact)).toLocaleString()}</span></div>
+        <div class="mrow"><span class="mrow-label">Portfolio ${isPos?'high':'low'}</span>
+          <span class="mrow-value">$${Math.round(t+impact).toLocaleString()}</span></div>
+        <div class="mrow"><span class="mrow-label">Months to ${isPos?'peak':'trough'}</span>
+          <span class="mrow-value">${r.dur} mo</span></div>
+        <div class="mrow"><span class="mrow-label">Recovery / normalize</span>
+          <span class="mrow-value">${r.rec>=240?(r.rec/12).toFixed(0)+' yrs':r.rec+' mo'}</span></div>
+        <div class="mrow"><span class="mrow-label">S&amp;P 500</span>
+          <span class="mrow-value ${r.spx>0?'grn':'red'}">${r.spx>0?'+':''}${r.spx}%</span></div>
+      </div>
+      ${best&&worst&&best!==worst?`
+      <div class="metric-divider"></div>
+      <div class="metric-rows">
+        <div class="mrow"><span class="mrow-label">Best asset</span>
+          <span class="mrow-value ${best.dollar>=0?'grn':'red'}">${best.label} ${best.dollar>=0?'+':'–'}$${Math.abs(Math.round(best.dollar)).toLocaleString()}</span></div>
+        <div class="mrow"><span class="mrow-label">Worst asset</span>
+          <span class="mrow-value ${worst.dollar>=0?'grn':'red'}">${worst.label} ${worst.dollar>=0?'+':'–'}$${Math.abs(Math.round(worst.dollar)).toLocaleString()}</span></div>
+      </div>`:''}
+      <div class="metric-quality">${qLabel[r.q]||r.q}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Asset chart ──────────────────────────────────────
+function renderAssetChart(r) {
+  const c=contribs(r);
+  if(assetCh) assetCh.destroy();
+  assetCh=new Chart(document.getElementById('assetChart'),{type:'bar',
+    data:{labels:c.map(x=>x.label),datasets:[{label:'Dollar Impact',
+      data:c.map(x=>Math.round(x.dollarImpact)),
+      backgroundColor:c.map(x=>x.dollarImpact<0?'#f04f5a55':'#22c55e55'),
+      borderColor:c.map(x=>x.dollarImpact<0?'#f04f5a':'#22c55e'),
+      borderWidth:1,borderRadius:4}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        title:{display:true,text:r.name,color:'#7a8499',font:{size:11},padding:{bottom:10}},
+        tooltip:{backgroundColor:'#13151f',borderColor:'#272b3d',borderWidth:1,
+          callbacks:{label:i=>{const v=i.parsed.x;return ` $${Math.abs(Math.round(v)).toLocaleString()} ${v<0?'loss':'gain'}`;} }}},
+      scales:{
+        x:{ticks:{color:'#7a8499',callback:v=>'$'+(v/1000).toFixed(0)+'K'},grid:{color:'#1a1d2b'}},
+        y:{ticks:{color:'#e4e8f0',font:{size:11}},grid:{display:false}}}}});
+}
+
+// ─── Donut ────────────────────────────────────────────
+function renderDonut() {
+  pct();
+  const entries=Object.values(ALLOC).filter(e=>e.value>0);
+  if(donutCh) donutCh.destroy();
+  donutCh=new Chart(document.getElementById('donutChart'),{type:'doughnut',
+    data:{labels:entries.map(e=>e.label),
+      datasets:[{data:entries.map(e=>e.value),
+        backgroundColor:entries.map(e=>e.color+'bb'),
+        borderColor:entries.map(e=>e.color),borderWidth:1}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'right',labels:{color:'#e4e8f0',font:{size:10},boxWidth:9,padding:7}},
+        tooltip:{backgroundColor:'#13151f',borderColor:'#272b3d',borderWidth:1,
+          callbacks:{label:i=>{const e=entries[i.dataIndex];return ` $${e.value.toLocaleString()} (${(e.pct*100).toFixed(1)}%)`;}}}}}});
+}
+function updateDonut() {
+  renderDonut();
+}
+
+// ─── Table ────────────────────────────────────────────
+function renderTable(recs) {
+  const el=document.getElementById('compTable');
+  if(recs.length===0){el.style.display='none';return;}
+  el.style.display='block';
+  const t=tot();
+  document.getElementById('tableBody').innerHTML=recs.map(r=>{
+    const troughVal=makePath(r,'absolute',realMode,divMode)[r.dur];
+    const d=((troughVal/t)-1)*100,impact=troughVal-t,isPos=d>0;
+    const rec=r.rec>=240?(r.rec/12).toFixed(0)+' yrs':r.rec+' mo';
+    return `<tr>
+      <td><div class="cell-rec"><div class="cell-dot" style="background:${r.color}"></div>${r.name}</div></td>
+      <td class="cell-muted">${r.period}</td>
+      <td>${r.dur} mo</td>
+      <td class="${isPos?'cell-pos':'cell-neg'}">${isPos?'+':''}${d.toFixed(1)}%</td>
+      <td class="${isPos?'cell-pos':'cell-neg'}">${isPos?'+':'–'}$${Math.abs(Math.round(impact)).toLocaleString()}</td>
+      <td>${rec}</td>
+      <td class="${r.spx>0?'cell-pos':'cell-neg'}">${r.spx>0?'+':''}${r.spx}%</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Interactions ─────────────────────────────────────
+function tog(id){ selected.has(id)?selected.delete(id):selected.add(id); renderSidebar(); renderMainChart(); }
+function hov(id){ if(id&&selected.size===0){const r=RECESSIONS.find(r=>r.id===id);if(r)renderAssetChart(r);} }
+function selectAll(){ RECESSIONS.forEach(r=>selected.add(r.id)); renderSidebar(); renderMainChart(); }
+function clearAll(){ selected.clear(); renderSidebar(); renderMainChart(); }
+function setMode(m){
+  chartMode=m;
+  document.getElementById('btn-absolute').classList.toggle('active',m==='absolute');
+  document.getElementById('btn-indexed').classList.toggle('active',m==='indexed');
+  renderMainChart();
+}
+function setRealMode(on){
+  realMode=on;
+  document.getElementById('btn-nominal').classList.toggle('active',!on);
+  document.getElementById('btn-real').classList.toggle('active',on);
+  renderMainChart();
+}
+function setDivMode(on){
+  divMode=on;
+  document.getElementById('btn-price').classList.toggle('active',!on);
+  document.getElementById('btn-total').classList.toggle('active',on);
+  renderMainChart();
+}
+function setLogScale(on){
+  logScale=on;
+  document.getElementById('btn-linear').classList.toggle('active',!on);
+  document.getElementById('btn-log').classList.toggle('active',on);
+  renderMainChart();
+}
+
+// ─── Init ─────────────────────────────────────────────
+pct(); renderEditor(); renderSidebar(); renderDonut();
+tog('r2008'); tog('r2020');
+</script>
+</body>
+</html>
