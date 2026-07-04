@@ -599,9 +599,9 @@ tbody tr:hover td { background: rgba(255,255,255,.015); }
           <h3>Structural Limitations</h3>
           <ul style="columns:2;column-gap:32px;column-rule:1px solid var(--border);">
             <li><strong>Recovery curves are modeled:</strong> The drawdown phase uses a cubic Hermite (S-curve) and recovery uses a square-root curve. Actual paths were irregular and non-monotonic — this is an approximation.</li>
-            <li><strong>Dividends (user-selectable):</strong> Toggle total return including dividends via the <em>Income</em> control. Yields are era-specific: Large Cap ranged from ~5.5% in 1937–38 to ~1.5% in 2001–02; Bonds from ~2% (WWII era) to ~13% at the 1981–82 Volcker peak; REIT 9–10% in the 1980s to ~4.5% in 2020. Modeled as received-not-reinvested for simplicity.</li>
+            <li><strong>Dividends (user-selectable):</strong> Toggle total return including dividends via the <em>Income</em> control. Yields are era-specific: Large Cap ranged from ~5.5% in 1937–38 to ~1.5% in 2001–02; Bonds from ~2% (WWII era) to ~13% at the 1981–82 Volcker peak; REIT 9–10% in the 1980s to ~4.5% in 2020; CDs accrue each era's average 3-month T-bill rate (near zero in the 1930s–40s, ~12% at the Volcker peak), so CD interest appears only in +Dividends mode while principal stays flat. Modeled as received-not-reinvested for simplicity.</li>
             <li><strong>No rebalancing assumed:</strong> Allocation percentages are held fixed throughout each simulation. Systematic rebalancing during a drawdown typically improves long-term results.</li>
-            <li><strong>Nominal vs. real (user-selectable):</strong> Toggle inflation-adjusted values via the <em>Returns</em> control. Real mode deflates each path point by the recession's average CPI. Notable: 1980 (~13.5% CPI), 1973–75 (~9.2%), 1981–82 (~9.4%) — real losses were substantially worse than nominal. The Great Depression used –6.0% (deflation), meaning nominal losses slightly overstated real purchasing-power losses.</li>
+            <li><strong>Nominal vs. real (user-selectable):</strong> Toggle inflation-adjusted values via the <em>Returns</em> control. Real mode deflates each path point by the recession's average CPI. Notable: 1980 (~13.5% CPI), 1973–75 (~9.2%), 1981–82 (~9.4%) — real losses were substantially worse than nominal. The Great Depression used –6.0% (deflation), meaning nominal losses slightly overstated real purchasing-power losses. Deflation is applied only through the downturn phase — the 1929–33 price decline did not persist through the multi-decade recovery, so it is not extrapolated past the trough.</li>
             <li><strong>Correlation simplification:</strong> Portfolio drawdown is the allocation-weighted average of individual asset class returns. Cross-asset contagion (e.g., 2008, when all risk asset correlations spiked to near-1) is not modeled.</li>
             <li><strong>One trough per recession:</strong> Each recession uses a single peak-to-trough figure. Multi-leg bear markets (e.g., the Dot-com bust had two distinct legs in 2001 and 2002) are collapsed to their aggregate drawdown.</li>
           </ul>
@@ -654,91 +654,91 @@ const RECESSIONS = [
     dur:43, rec:264, spx:-86, q:'verified', inf:-6.0,
     note:'The DJIA/S&P fell ~86% from peak to trough. Bloomberg verified. Recovery to pre-crash nominal levels took until 1954.',
     d:{ largeCap:-86,midCap:-88,smallCap:-89,emerging:-86,developed:-86,bonds:20,cds:0,reit:-80,crypto:0,goldSilver:0,cash:8 },
-    dy:{ largeCap:5.0,midCap:4.5,smallCap:4.5,emerging:4.0,developed:4.0,bonds:4.0,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+    dy:{ largeCap:5.0,midCap:4.5,smallCap:4.5,emerging:4.0,developed:4.0,bonds:4.0,cds:2.0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1937', name:'1937–38 Recession', period:'1937–1938', color:'#f97316',
     dur:13, rec:60, spx:-54.5, q:'verified', inf:3.5,
     note:'Bloomberg verified: –54.5% peak Mar 1937 to trough Mar 1938. Caused by premature Fed tightening after only a partial Depression recovery — a cautionary tale about withdrawing stimulus too soon.',
     d:{ largeCap:-54,midCap:-58,smallCap:-60,emerging:-54,developed:-54,bonds:3,cds:0,reit:-50,crypto:0,goldSilver:0,cash:2 },
-    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:2.5,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:2.5,cds:0.3,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1945', name:'1945 Recession', period:'1945', color:'#22c55e',
     dur:8, rec:18, spx:38, q:'verified', inf:2.3,
     note:'The only recession in history where equities rose. The S&P gained +38% during Feb–Oct 1945 as markets priced in the end of WWII. Post-war normalization and demand shifts caused the actual NBER-defined recession, but investors were already looking forward.',
     d:{ largeCap:38,midCap:34,smallCap:30,emerging:20,developed:25,bonds:-2,cds:0,reit:22,crypto:0,goldSilver:0,cash:0 },
-    dy:{ largeCap:4.5,midCap:4.0,smallCap:4.0,emerging:3.5,developed:3.5,bonds:2.0,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+    dy:{ largeCap:4.5,midCap:4.0,smallCap:4.0,emerging:3.5,developed:3.5,bonds:2.0,cds:0.4,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1948', name:'1948–49 Recession', period:'1948–1949', color:'#84cc16',
     dur:11, rec:10, spx:-14, q:'proxy', inf:3.0,
     note:'The NBER recession window (Nov 1948–Oct 1949) saw ~–14% in equities. The often-cited –29.6% figure measures from the May 1946 post-war peak — a much longer window. Post-war economic normalization after wartime stimulus ended.',
     d:{ largeCap:-14,midCap:-16,smallCap:-18,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
-    dy:{ largeCap:6.0,midCap:5.5,smallCap:5.5,emerging:5.0,developed:5.0,bonds:2.5,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+    dy:{ largeCap:6.0,midCap:5.5,smallCap:5.5,emerging:5.0,developed:5.0,bonds:2.5,cds:1.1,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1953', name:'1953–54 Recession', period:'1953–1954', color:'#10b981',
     dur:10, rec:12, spx:-14, q:'proxy', inf:0.4,
     note:'Did not reach the –20% bear market threshold. A mild ~–14% decline driven by post-Korean War defense spending cuts and inventory correction. One of the mildest recessions in modern history.',
     d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
-    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:3.0,cds:0,reit:5.5,crypto:0,goldSilver:0,cash:0 } },
+    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:3.0,cds:1.5,reit:5.5,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1957', name:'1957–58 Recession', period:'1957–1958', color:'#14b8a6',
     dur:3, rec:9, spx:-20.7, q:'verified', inf:2.9,
     note:'Bloomberg verified: –20.7% peak Jul 1957 to trough Oct 1957. Eisenhower-era Fed tightening to fight inflation, combined with a drop in auto sales and a brief Sputnik-era economic shock.',
     d:{ largeCap:-21,midCap:-23,smallCap:-26,emerging:-21,developed:-21,bonds:4,cds:0,reit:-18,crypto:0,goldSilver:0,cash:1 },
-    dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:3.5,cds:0,reit:5.5,crypto:0,goldSilver:0,cash:0 } },
+    dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:3.5,cds:3.3,reit:5.5,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1960', name:'1960–61 Recession', period:'1960–1961', color:'#06b6d4',
     dur:10, rec:11, spx:-14, q:'proxy', inf:1.4,
     note:'Did not reach –20% bear market threshold. A brief Kennedy-era recession caused by tight monetary policy and a balance-of-payments deficit. The economy recovered quickly under the Kennedy stimulus program.',
     d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:4,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
-    dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:4.0,cds:0,reit:6.0,crypto:0,goldSilver:0,cash:0 } },
+    dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:4.0,cds:2.5,reit:6.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1969', name:'1969–70 Recession', period:'1969–1970', color:'#3b82f6',
     dur:18, rec:9, spx:-35.4, q:'verified', inf:5.6,
     note:'Bloomberg verified: –35.4% peak Nov 1968 to trough May 1970. Rising inflation eroded fixed income returns. The Bretton Woods system was under stress, and Nixon would eventually end dollar-gold convertibility in 1971.',
-    d:{ largeCap:-35,midCap:-40,smallCap:-45,emerging:-35,developed:-35,bonds:-3,cds:0,reit:-30,crypto:0,goldSilver:5,cash:-2 },
-    dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:6.5,cds:0,reit:6.5,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-35,midCap:-40,smallCap:-45,emerging:-35,developed:-35,bonds:-3,cds:0,reit:-30,crypto:0,goldSilver:5,cash:0 },
+    dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:6.5,cds:6.5,reit:6.5,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1973', name:'Oil Crisis / Stagflation', period:'1973–1975', color:'#6366f1',
     dur:21, rec:21, spx:-48.2, q:'verified', inf:9.2,
     note:'Bloomberg verified: –48.2% peak Jan 1973 to trough Oct 1974. The OPEC oil embargo triggered stagflation — simultaneous high inflation and recession. Gold surged ~70% after Nixon ended dollar-gold convertibility. Bonds and cash were both hurt by inflation.',
-    d:{ largeCap:-48,midCap:-52,smallCap:-55,emerging:-45,developed:-45,bonds:-5,cds:2,reit:-42,crypto:0,goldSilver:70,cash:-5 },
-    dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:7.5,cds:0,reit:8.0,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-48,midCap:-52,smallCap:-55,emerging:-45,developed:-45,bonds:-5,cds:0,reit:-42,crypto:0,goldSilver:70,cash:0 },
+    dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:7.5,cds:7.5,reit:8.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1980', name:'1980 Recession', period:'1980', color:'#8b5cf6',
     dur:6, rec:8, spx:-17, q:'proxy', inf:13.5,
     note:'The specific Jan–Jul 1980 NBER window saw ~–17% before the market temporarily recovered. Fed Chairman Volcker\'s aggressive rate hikes to break inflation caused sharp but brief pain. Gold had already peaked in Jan 1980 at $850/oz and fell sharply.',
-    d:{ largeCap:-17,midCap:-20,smallCap:-23,emerging:-17,developed:-17,bonds:-12,cds:3,reit:-15,crypto:0,goldSilver:-30,cash:-3 },
-    dy:{ largeCap:5.0,midCap:4.5,smallCap:4.5,emerging:4.0,developed:4.0,bonds:10.0,cds:0,reit:9.0,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-17,midCap:-20,smallCap:-23,emerging:-17,developed:-17,bonds:-12,cds:0,reit:-15,crypto:0,goldSilver:-30,cash:0 },
+    dy:{ largeCap:5.0,midCap:4.5,smallCap:4.5,emerging:4.0,developed:4.0,bonds:10.0,cds:11.5,reit:9.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1981', name:'1981–82 Recession', period:'1981–1982', color:'#a855f7',
     dur:21, rec:15, spx:-27.1, q:'verified', inf:9.4,
     note:'Bloomberg verified: –27.1% peak Nov 1980 to trough Aug 1982. The Volcker Shock — sustained high interest rates to break the inflation cycle — caused a severe recession. Bonds rallied strongly as inflation expectations fell and rates began dropping.',
-    d:{ largeCap:-27,midCap:-30,smallCap:-30,emerging:-27,developed:-27,bonds:10,cds:4,reit:-22,crypto:0,goldSilver:-30,cash:-2 },
-    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:13.0,cds:0,reit:10.0,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-27,midCap:-30,smallCap:-30,emerging:-27,developed:-27,bonds:10,cds:0,reit:-22,crypto:0,goldSilver:-30,cash:0 },
+    dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:13.0,cds:12.5,reit:10.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1990', name:'Gulf War Recession', period:'1990–1991', color:'#ec4899',
     dur:8, rec:4, spx:-20, q:'proxy', inf:4.6,
     note:'~–20% peak-to-trough (Jul–Oct 1990). The Savings & Loan crisis devastated REITs and commercial real estate. Oil price spike from the Gulf War rattled consumer confidence. A relatively quick recovery once the war ended and oil prices normalized.',
-    d:{ largeCap:-20,midCap:-24,smallCap:-30,emerging:-25,developed:-22,bonds:9,cds:2,reit:-28,crypto:0,goldSilver:-5,cash:1 },
-    dy:{ largeCap:3.5,midCap:3.0,smallCap:3.0,emerging:3.5,developed:3.5,bonds:8.5,cds:0,reit:7.5,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-20,midCap:-24,smallCap:-30,emerging:-25,developed:-22,bonds:9,cds:0,reit:-28,crypto:0,goldSilver:-5,cash:1 },
+    dy:{ largeCap:3.5,midCap:3.0,smallCap:3.0,emerging:3.5,developed:3.5,bonds:8.5,cds:7.5,reit:7.5,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r2001', name:'Dot-com Bust', period:'2001–2002', color:'#f43f5e',
     dur:31, rec:56, spx:-49.1, q:'verified', inf:2.8,
     note:'Bloomberg verified: –49.1% peak Mar 2000 to trough Oct 2002. The NASDAQ fell nearly 80%. REITs (+15%) and bonds (+12%) were standout safe havens as investors fled growth stocks. Gold began a multi-year bull run. Compounded by 9/11 and corporate accounting scandals.',
-    d:{ largeCap:-49,midCap:-42,smallCap:-35,emerging:-30,developed:-45,bonds:12,cds:2,reit:15,crypto:0,goldSilver:10,cash:2 },
-    dy:{ largeCap:1.5,midCap:1.2,smallCap:1.2,emerging:2.0,developed:2.0,bonds:5.5,cds:0,reit:7.0,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-49,midCap:-42,smallCap:-35,emerging:-30,developed:-45,bonds:12,cds:0,reit:15,crypto:0,goldSilver:10,cash:2 },
+    dy:{ largeCap:1.5,midCap:1.2,smallCap:1.2,emerging:2.0,developed:2.0,bonds:5.5,cds:3.5,reit:7.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r2008', name:'Great Recession', period:'2007–2009', color:'#fb923c',
     dur:17, rec:48, spx:-56.8, q:'verified', inf:2.5,
     note:'Bloomberg verified: –56.8% peak Oct 2007 to trough Mar 2009. The housing and credit crisis spread globally. REITs collapsed –68%. Emerging markets fell even harder than the US. Gold (+25%) and US Treasuries provided the only meaningful cushion.',
-    d:{ largeCap:-57,midCap:-60,smallCap:-60,emerging:-65,developed:-58,bonds:5,cds:1,reit:-68,crypto:0,goldSilver:25,cash:2 },
-    dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:4.5,cds:0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-57,midCap:-60,smallCap:-60,emerging:-65,developed:-58,bonds:5,cds:0,reit:-68,crypto:0,goldSilver:25,cash:2 },
+    dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:4.5,cds:2.0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r2020', name:'COVID-19 Crash', period:'2020', color:'#64748b',
     dur:1, rec:5, spx:-33.9, q:'verified', inf:1.2,
     note:'Bloomberg verified: –33.9% peak Feb 2020 to trough Mar 2020 — the fastest bear market on record at just 33 days. Also the fastest recovery in history. Crypto fell –50% initially, then surged to new highs. Massive fiscal and monetary stimulus drove the rapid rebound.',
-    d:{ largeCap:-34,midCap:-40,smallCap:-42,emerging:-32,developed:-34,bonds:8,cds:1,reit:-42,crypto:-50,goldSilver:12,cash:1 },
-    dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:2.0,cds:0,reit:4.5,crypto:0,goldSilver:0,cash:0 } },
+    d:{ largeCap:-34,midCap:-40,smallCap:-42,emerging:-32,developed:-34,bonds:8,cds:0,reit:-42,crypto:-50,goldSilver:12,cash:1 },
+    dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:2.0,cds:0.5,reit:4.5,crypto:0,goldSilver:0,cash:0 } },
 ];
 
 // ─── State ────────────────────────────────────────────
@@ -755,7 +755,7 @@ function renderEditor() {
       <div class="alloc-input-wrap">
         <span class="alloc-prefix">$</span>
         <input class="alloc-input" type="number" min="0" step="1000" value="${Math.round(a.value)}"
-          oninput="onInput('${k}',this.value)" onchange="onInput('${k}',this.value)">
+          oninput="onInput('${k}',this.value)">
       </div>
       <div class="alloc-pct" id="pct-${k}">${(a.pct*100).toFixed(1)}%</div>
     </div>`).join('');
@@ -778,8 +778,9 @@ function fmtTot(t) {
 }
 function resetAlloc() { ALLOC=cp(BASE); renderEditor(); refreshAll(); }
 function setPreset(name) {
-  const mix=PRESETS[name], t=tot();
-  Object.entries(mix).forEach(([k,p]) => { ALLOC[k].value = t * p; });
+  // Fall back to $1M if the user zeroed everything out — otherwise presets scale 0 and become a no-op
+  const mix=PRESETS[name], t=tot()||1000000;
+  Object.entries(mix).forEach(([k,p]) => { ALLOC[k].value = Math.round(t * p); });
   renderEditor(); refreshAll();
   document.querySelectorAll('.alloc-row').forEach(el => {
     el.classList.remove('flashed');
@@ -796,12 +797,30 @@ function refreshAll() {
 // ─── Calculations ─────────────────────────────────────
 function dd(r) { pct(); return Object.entries(ALLOC).reduce((s,[k,a])=>s+a.pct*(r.d[k]??0),0); }
 function contribs(r) {
-  pct();
   return Object.entries(ALLOC).map(([k,a])=>({
     label:a.label,color:a.color,
-    dollarImpact:a.value*((r.d[k]??0)/100),
-    contribution:a.pct*(r.d[k]??0),
-  })).sort((a,b)=>a.contribution-b.contribution);
+    dollarImpact:assetImpact(r,k,a),
+  })).sort((a,b)=>a.dollarImpact-b.dollarImpact);
+}
+// Per-asset dollar change at the trough month on the current Real/Dividend basis,
+// so per-asset figures always sum to makePath(r,'absolute',realMode,divMode)[r.dur]-tot().
+function assetImpact(r,k,a) {
+  let v=a.value*(1+(r.d[k]??0)/100);
+  if(divMode) v+=a.value*((r.dy[k]||0)/100)*(r.dur/12);
+  if(realMode) v/=Math.pow(1+r.inf/100,r.dur/12);
+  return v-a.value;
+}
+// Extreme of the current-mode path within the downturn window, by larger deviation
+// from start. Dividends/deflation can shift the true extreme off month r.dur,
+// so scan the window rather than index it.
+function pathExtreme(r) {
+  const t=tot(), win=makePath(r,'absolute',realMode,divMode).slice(0,r.dur+1);
+  const mn=Math.min(...win), mx=Math.max(...win);
+  return t-mn>=mx-t ? mn : mx;
+}
+function fmtRec(rec) {
+  const y=rec/12;
+  return rec>=240 ? (Number.isInteger(y)?y:y.toFixed(1))+' yrs' : rec+' mo';
 }
 function makePath(r, mode, real, divs) {
   const t=tot(), d=dd(r), trough=t*(1+d/100), pts=[];
@@ -822,8 +841,10 @@ function makePath(r, mode, real, divs) {
     }
     let val=raw;
     if(divs) val+=Object.entries(ALLOC).reduce((sum,[k,a])=>sum+a.value*((r.dy[k]||0)/100)*(m/12),0);
-    if(real) val/=Math.pow(1+r.inf/100,m/12);
-    pts.push(mode==='indexed'?((val/t)-1)*100:val);
+    // Deflation (negative inf) only ran during the downturn itself (e.g. 1929–33);
+    // compounding it across a multi-decade recovery would inflate real values absurdly.
+    if(real) val/=Math.pow(1+r.inf/100,(r.inf<0?Math.min(m,r.dur):m)/12);
+    pts.push(mode==='indexed'?(t>0?((val/t)-1)*100:0):val);
     if(canRecover && m>nomEnd){
       const v=pts[pts.length-1];
       if(mode==='indexed' ? v>=0 : v>=t) break;
@@ -855,14 +876,13 @@ function renderSidebar() {
 function renderDetailPanel(r) {
   const el=document.getElementById('detailPanel');
   if(!r){ el.style.display='none'; el.innerHTML=''; return; }
-  const recStr = r.rec>=240 ? (r.rec/12).toFixed(0)+' years' : r.rec+' months';
   el.style.display='block';
   el.innerHTML=`<div class="panel detail-panel" style="border-left-color:${r.color}">
     <div class="panel-title" style="color:${r.color};margin-bottom:10px;">${r.name}</div>
     <p>${r.note}</p>
     <div class="detail-pills">
-      <span class="detail-pill">Downturn: <strong>${r.dur} months</strong></span>
-      <span class="detail-pill">Recovery: <strong>${recStr}</strong></span>
+      <span class="detail-pill">Downturn: <strong>${r.dur} mo</strong></span>
+      <span class="detail-pill">${r.spx>0?'Normalize':'Recovery'}: <strong>${fmtRec(r.rec)}</strong></span>
       <span class="detail-pill">S&amp;P 500: <strong style="color:${r.spx>0?'var(--green)':'var(--red)'}">${r.spx>0?'+':''}${r.spx}%</strong></span>
     </div>
   </div>`;
@@ -876,6 +896,7 @@ function renderMainChart() {
     document.getElementById('metricsGrid').innerHTML='';
     document.getElementById('compTable').style.display='none';
     renderDetailPanel(null);
+    if(assetCh){ assetCh.destroy(); assetCh=null; }
     return;
   }
   canvas.style.display='block'; empty.style.display='none';
@@ -942,12 +963,15 @@ function renderMetrics(recs) {
   grid.classList.toggle('single', recs.length===1);
   const sublabel = realMode&&divMode ? 'Real Total Return' : realMode ? 'Real (Inflation-Adjusted)' : divMode ? 'Total Return (w/ Dividends)' : 'Estimated Portfolio';
   grid.innerHTML=recs.map(r=>{
-    const troughVal=makePath(r,'absolute',realMode,divMode)[r.dur];
-    const d=((troughVal/t)-1)*100, impact=troughVal-t, isPos=d>0;
-    // Best/worst by dollar impact (not raw %) among non-zero positions — price-return basis
+    const troughVal=pathExtreme(r);
+    const d=t>0?((troughVal/t)-1)*100:0, impact=troughVal-t, isPos=d>=0;
+    // Best/worst by dollar impact (not raw %) among non-zero positions,
+    // on the same Real/Dividend basis as the headline so the two can't contradict.
+    // Assets that didn't move (or didn't exist yet — pre-2009 crypto) are excluded.
     const active=Object.entries(r.d)
       .filter(([k])=>ALLOC[k]&&ALLOC[k].value>0)
-      .map(([k,p])=>({label:ALLOC[k].label, pct:p, dollar:ALLOC[k].value*(p/100)}))
+      .map(([k])=>({label:ALLOC[k].label, dollar:assetImpact(r,k,ALLOC[k])}))
+      .filter(a=>Math.round(a.dollar)!==0)
       .sort((a,b)=>b.dollar-a.dollar);
     const best=active[0], worst=active[active.length-1];
     return `<div class="metric-card">
@@ -963,7 +987,7 @@ function renderMetrics(recs) {
         <div class="mrow"><span class="mrow-label">Months to ${isPos?'peak':'trough'}</span>
           <span class="mrow-value">${r.dur} mo</span></div>
         <div class="mrow"><span class="mrow-label">Recovery / normalize</span>
-          <span class="mrow-value">${r.rec>=240?(r.rec/12).toFixed(0)+' yrs':r.rec+' mo'}</span></div>
+          <span class="mrow-value">${fmtRec(r.rec)}</span></div>
         <div class="mrow"><span class="mrow-label">S&amp;P 500</span>
           <span class="mrow-value ${r.spx>0?'grn':'red'}">${r.spx>0?'+':''}${r.spx}%</span></div>
       </div>
@@ -1026,9 +1050,9 @@ function renderTable(recs) {
   el.style.display='block';
   const t=tot();
   document.getElementById('tableBody').innerHTML=recs.map(r=>{
-    const troughVal=makePath(r,'absolute',realMode,divMode)[r.dur];
-    const d=((troughVal/t)-1)*100,impact=troughVal-t,isPos=d>0;
-    const rec=r.rec>=240?(r.rec/12).toFixed(0)+' yrs':r.rec+' mo';
+    const troughVal=pathExtreme(r);
+    const d=t>0?((troughVal/t)-1)*100:0,impact=troughVal-t,isPos=d>=0;
+    const rec=fmtRec(r.rec);
     return `<tr>
       <td><div class="cell-rec"><div class="cell-dot" style="background:${r.color}"></div>${r.name}</div></td>
       <td class="cell-muted">${r.period}</td>
@@ -1043,7 +1067,11 @@ function renderTable(recs) {
 
 // ─── Interactions ─────────────────────────────────────
 function tog(id){ selected.has(id)?selected.delete(id):selected.add(id); renderSidebar(); renderMainChart(); }
-function hov(id){ if(id&&selected.size===0){const r=RECESSIONS.find(r=>r.id===id);if(r)renderAssetChart(r);} }
+function hov(id){
+  if(selected.size>0) return; // a selection owns the asset chart; previews only when nothing is selected
+  if(id){ const r=RECESSIONS.find(r=>r.id===id); if(r)renderAssetChart(r); }
+  else if(assetCh){ assetCh.destroy(); assetCh=null; }
+}
 function selectAll(){ RECESSIONS.forEach(r=>selected.add(r.id)); renderSidebar(); renderMainChart(); }
 function clearAll(){ selected.clear(); renderSidebar(); renderMainChart(); }
 function setMode(m){
