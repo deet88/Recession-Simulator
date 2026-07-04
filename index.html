@@ -4,13 +4,36 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recession Simulator</title>
+<script>
+// Apply saved theme before first paint to avoid a flash of the wrong mode
+(function(){
+  const t = localStorage.getItem('recsim-theme') ||
+    (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  document.documentElement.dataset.theme = t;
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
   --bg: #0b0d14; --surface: #13151f; --card: #1a1d2b; --card2: #1f2233;
   --border: #272b3d; --border2: #323654; --text: #e4e8f0; --muted: #7a8499;
   --faint: #4a5168; --accent: #5d6af0; --accent-light: #818cf8;
-  --green: #22c55e; --red: #f04f5a; --radius: 10px;
+  --green: #22c55e; --red: #f04f5a; --amber: #f59e0b; --strong: #fff;
+  --hover: rgba(255,255,255,.015); --line-faint: rgba(255,255,255,.04);
+  --radius: 10px; color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #eef1f6; --surface: #ffffff; --card: #ffffff; --card2: #f3f5fa;
+  --border: #e2e6ef; --border2: #cdd3e1; --text: #232a3b; --muted: #5c6577;
+  --faint: #98a0b3; --accent: #4d5ae3; --accent-light: #4553d6;
+  --green: #15803d; --red: #d02f3d; --amber: #b45309; --strong: #141a2a;
+  --hover: rgba(20,30,60,.03); --line-faint: rgba(20,30,60,.06);
+  color-scheme: light;
+}
+/* White text on the pale accent-tint hover is unreadable in light mode */
+:root[data-theme="light"] .btn-preset:hover { color: var(--accent); }
+body, header, .sidebar, .panel, .presets-panel, .method-panel {
+  transition: background-color .25s ease, border-color .25s ease, color .25s ease;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
@@ -19,13 +42,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans
 header { background: var(--surface); border-bottom: 1px solid var(--border);
   padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
   gap: 16px; position: sticky; top: 0; z-index: 100; }
-.header-brand h1 { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -.01em; }
+.header-brand h1 { font-size: 16px; font-weight: 700; color: var(--strong); letter-spacing: -.01em; }
 .header-brand h1 em { font-style: normal; color: var(--accent-light); }
 .header-brand p { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.header-right { display: flex; align-items: center; gap: 20px; }
 .header-stats { display: flex; gap: 28px; }
 .hstat { text-align: right; }
 .hstat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
-.hstat-value { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -.02em; line-height: 1.2; }
+.hstat-value { font-size: 20px; font-weight: 800; color: var(--strong); letter-spacing: -.02em; line-height: 1.2; }
 .hstat-value.dyn { color: var(--accent-light); }
 
 .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 57px); }
@@ -65,10 +89,10 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
 .rec-name { font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; }
 .rec-period { font-size: 10px; color: var(--muted); }
 .rec-badge { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; flex-shrink: 0; }
-.badge-severe   { background: rgba(240,79,90,.15);  color: #f04f5a; }
-.badge-moderate { background: rgba(245,158,11,.15); color: #f59e0b; }
-.badge-mild     { background: rgba(34,197,94,.15);  color: #22c55e; }
-.badge-positive { background: rgba(34,197,94,.2);   color: #22c55e; }
+.badge-severe   { background: rgba(240,79,90,.15);  color: var(--red); }
+.badge-moderate { background: rgba(245,158,11,.15); color: var(--amber); }
+.badge-mild     { background: rgba(34,197,94,.15);  color: var(--green); }
+.badge-positive { background: rgba(34,197,94,.2);   color: var(--green); }
 .sidebar-note { background: rgba(93,106,240,.07); border: 1px solid rgba(93,106,240,.18);
   border-radius: 7px; padding: 10px 11px; font-size: 11px; color: var(--muted); line-height: 1.55; }
 .sidebar-note strong { color: var(--text); }
@@ -99,7 +123,7 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
 .alloc-footer { display: flex; align-items: center; justify-content: space-between;
   margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .alloc-footer-label { font-size: 12px; color: var(--muted); }
-.alloc-total { font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -.02em; }
+.alloc-total { font-size: 22px; font-weight: 800; color: var(--strong); letter-spacing: -.02em; }
 
 /* Charts */
 .chart-wrap { position: relative; }
@@ -142,7 +166,7 @@ thead th { padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 70
   color: var(--faint); text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); }
 tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
 tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover td { background: rgba(255,255,255,.015); }
+tbody tr:hover td { background: var(--hover); }
 .cell-rec { display: flex; align-items: center; gap: 7px; }
 .cell-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .cell-neg { color: var(--red); font-weight: 700; }
@@ -191,13 +215,13 @@ tbody tr:hover td { background: rgba(255,255,255,.015); }
 .method-corrections li:last-child { border-bottom: none; }
 .corr-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
   flex-shrink: 0; margin-top: 2px; }
-.corr-before { background: rgba(240,79,90,.15); color: #f04f5a; }
-.corr-after  { background: rgba(34,197,94,.15);  color: #22c55e; }
+.corr-before { background: rgba(240,79,90,.15); color: var(--red); }
+.corr-after  { background: rgba(34,197,94,.15);  color: var(--green); }
 .proxy-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .proxy-table th { text-align: left; font-size: 10px; font-weight: 700; color: var(--faint);
   text-transform: uppercase; letter-spacing: .07em; padding: 5px 8px;
   border-bottom: 1px solid var(--border); }
-.proxy-table td { padding: 7px 8px; font-size: 12px; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; }
+.proxy-table td { padding: 7px 8px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line-faint); vertical-align: top; }
 .proxy-table td:first-child { color: var(--text); font-weight: 500; white-space: nowrap; }
 .proxy-table td:nth-child(2) { color: var(--accent-light); white-space: nowrap; }
 .method-full { grid-column: 1 / -1; }
@@ -210,7 +234,7 @@ tbody tr:hover td { background: rgba(255,255,255,.015); }
 .method-warn { background: rgba(245,158,11,.07); border: 1px solid rgba(245,158,11,.2);
   border-radius: 7px; padding: 10px 13px; font-size: 11px; color: var(--muted); line-height: 1.65;
   margin-top: 16px; }
-.method-warn strong { color: #f59e0b; }
+.method-warn strong { color: var(--amber); }
 @media (max-width: 768px) {
   .method-grid { grid-template-columns: 1fr; }
   .corrections-grid { grid-template-columns: 1fr; }
@@ -297,11 +321,14 @@ tbody tr:hover td { background: rgba(255,255,255,.015); }
     <h1><em>Recession Simulator</em></h1>
     <p>Shiller-verified data · Adjust allocation · Select recessions to compare</p>
   </div>
-  <div class="header-stats">
-    <div class="hstat">
-      <div class="hstat-label">Portfolio Value</div>
-      <div class="hstat-value dyn" id="headerTotal">$1,000,000</div>
+  <div class="header-right">
+    <div class="header-stats">
+      <div class="hstat">
+        <div class="hstat-label">Portfolio Value</div>
+        <div class="hstat-value dyn" id="headerTotal">$1,000,000</div>
+      </div>
     </div>
+    <button class="btn" id="themeBtn" onclick="toggleTheme()" title="Switch between dark and light mode"></button>
   </div>
 </header>
 
@@ -745,6 +772,28 @@ const RECESSIONS = [
 let selected = new Set(), chartMode = 'absolute', realMode = false, divMode = false, logScale = false;
 let mainCh = null, assetCh = null, donutCh = null;
 
+// ─── Theme ────────────────────────────────────────────
+// Chart.js can't read CSS variables, so charts pull their chrome colors here
+// at render time. Each mode's inks are chosen for its surface, not auto-flipped.
+function chartInk() {
+  return document.documentElement.dataset.theme==='light'
+    ? { ink:'#232a3b', muted:'#5c6577', grid:'#e7eaf2', tipBg:'#ffffff', tipBorder:'#d6dbe8',
+        baseline:'rgba(20,30,60,.18)', red:'#d02f3d', green:'#15803d' }
+    : { ink:'#e4e8f0', muted:'#7a8499', grid:'#1a1d2b', tipBg:'#13151f', tipBorder:'#272b3d',
+        baseline:'#ffffff18', red:'#f04f5a', green:'#22c55e' };
+}
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme==='light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('recsim-theme', t);
+  syncThemeBtn();
+  refreshAll(); // charts re-render with the new mode's inks
+}
+function syncThemeBtn() {
+  const light = document.documentElement.dataset.theme==='light';
+  document.getElementById('themeBtn').textContent = light ? '☾ Dark' : '☀ Light';
+}
+
 // ─── Allocation editor ────────────────────────────────
 function renderEditor() {
   pct();
@@ -900,6 +949,7 @@ function renderMainChart() {
     return;
   }
   canvas.style.display='block'; empty.style.display='none';
+  const C=chartInk();
   const recs=RECESSIONS.filter(r=>selected.has(r.id));
   let maxM=0;
   const datasets=recs.map(r=>{
@@ -911,7 +961,7 @@ function renderMainChart() {
   });
   if(chartMode==='indexed') datasets.push({
     label:'Baseline', data:Array.from({length:maxM+1},(_,i)=>({x:i,y:0})),
-    borderColor:'#ffffff18', borderWidth:1, borderDash:[5,5], pointRadius:0, fill:false });
+    borderColor:C.baseline, borderWidth:1, borderDash:[5,5], pointRadius:0, fill:false });
 
   const modeTag=[realMode?'Real':'',divMode?'+Div':''].filter(Boolean).join(' ');
   document.getElementById('chartSub').textContent = (recs.length===1
@@ -924,21 +974,21 @@ function renderMainChart() {
     interaction:{mode:'index',intersect:false},
     scales:{
       x:{type:'linear',
-        title:{display:true,text:'Months from Recession Start',color:'#7a8499',font:{size:11}},
-        ticks:{color:'#7a8499',stepSize:12,callback:v=>v%12===0?`Yr ${v/12}`:null},
-        grid:{color:'#1a1d2b'}},
+        title:{display:true,text:'Months from Recession Start',color:C.muted,font:{size:11}},
+        ticks:{color:C.muted,stepSize:12,callback:v=>v%12===0?`Yr ${v/12}`:null},
+        grid:{color:C.grid}},
       y:{type:logScale&&chartMode==='absolute'?'logarithmic':'linear',
         title:{display:true,
           text:chartMode==='indexed'?'% Change from Pre-Recession':'Portfolio Value ($)',
-          color:'#7a8499',font:{size:11}},
-        ticks:{color:'#7a8499',callback:v=>chartMode==='indexed'?v.toFixed(0)+'%':
+          color:C.muted,font:{size:11}},
+        ticks:{color:C.muted,callback:v=>chartMode==='indexed'?v.toFixed(0)+'%':
           v>=1000000?'$'+(v/1000000).toFixed(1)+'M':'$'+(v/1000).toFixed(0)+'K'},
-        grid:{color:'#1a1d2b'}},
+        grid:{color:C.grid}},
     },
     plugins:{
-      legend:{labels:{color:'#e4e8f0',font:{size:11},boxWidth:10,padding:14}},
-      tooltip:{backgroundColor:'#13151f',borderColor:'#272b3d',borderWidth:1,
-        titleColor:'#e4e8f0',bodyColor:'#7a8499',padding:10,
+      legend:{labels:{color:C.ink,font:{size:11},boxWidth:10,padding:14}},
+      tooltip:{backgroundColor:C.tipBg,borderColor:C.tipBorder,borderWidth:1,
+        titleColor:C.ink,bodyColor:C.muted,padding:10,
         callbacks:{
           title:items=>`Month ${items[0].parsed.x}`,
           label:item=>{
@@ -1006,27 +1056,29 @@ function renderMetrics(recs) {
 
 // ─── Asset chart ──────────────────────────────────────
 function renderAssetChart(r) {
-  const c=contribs(r);
+  const c=contribs(r), C=chartInk();
   if(assetCh) assetCh.destroy();
   assetCh=new Chart(document.getElementById('assetChart'),{type:'bar',
     data:{labels:c.map(x=>x.label),datasets:[{label:'Dollar Impact',
       data:c.map(x=>Math.round(x.dollarImpact)),
-      backgroundColor:c.map(x=>x.dollarImpact<0?'#f04f5a55':'#22c55e55'),
-      borderColor:c.map(x=>x.dollarImpact<0?'#f04f5a':'#22c55e'),
+      backgroundColor:c.map(x=>(x.dollarImpact<0?C.red:C.green)+'55'),
+      borderColor:c.map(x=>x.dollarImpact<0?C.red:C.green),
       borderWidth:1,borderRadius:4}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false},
-        title:{display:true,text:r.name,color:'#7a8499',font:{size:11},padding:{bottom:10}},
-        tooltip:{backgroundColor:'#13151f',borderColor:'#272b3d',borderWidth:1,
+        title:{display:true,text:r.name,color:C.muted,font:{size:11},padding:{bottom:10}},
+        tooltip:{backgroundColor:C.tipBg,borderColor:C.tipBorder,borderWidth:1,
+          titleColor:C.ink,bodyColor:C.muted,
           callbacks:{label:i=>{const v=i.parsed.x;return ` $${Math.abs(Math.round(v)).toLocaleString()} ${v<0?'loss':'gain'}`;} }}},
       scales:{
-        x:{ticks:{color:'#7a8499',callback:v=>'$'+(v/1000).toFixed(0)+'K'},grid:{color:'#1a1d2b'}},
-        y:{ticks:{color:'#e4e8f0',font:{size:11}},grid:{display:false}}}}});
+        x:{ticks:{color:C.muted,callback:v=>'$'+(v/1000).toFixed(0)+'K'},grid:{color:C.grid}},
+        y:{ticks:{color:C.ink,font:{size:11}},grid:{display:false}}}}});
 }
 
 // ─── Donut ────────────────────────────────────────────
 function renderDonut() {
   pct();
+  const C=chartInk();
   const entries=Object.values(ALLOC).filter(e=>e.value>0);
   if(donutCh) donutCh.destroy();
   donutCh=new Chart(document.getElementById('donutChart'),{type:'doughnut',
@@ -1035,8 +1087,9 @@ function renderDonut() {
         backgroundColor:entries.map(e=>e.color+'bb'),
         borderColor:entries.map(e=>e.color),borderWidth:1}]},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'right',labels:{color:'#e4e8f0',font:{size:10},boxWidth:9,padding:7}},
-        tooltip:{backgroundColor:'#13151f',borderColor:'#272b3d',borderWidth:1,
+      plugins:{legend:{position:'right',labels:{color:C.ink,font:{size:10},boxWidth:9,padding:7}},
+        tooltip:{backgroundColor:C.tipBg,borderColor:C.tipBorder,borderWidth:1,
+          titleColor:C.ink,bodyColor:C.muted,
           callbacks:{label:i=>{const e=entries[i.dataIndex];return ` $${e.value.toLocaleString()} (${(e.pct*100).toFixed(1)}%)`;}}}}}});
 }
 function updateDonut() {
@@ -1100,6 +1153,7 @@ function setLogScale(on){
 }
 
 // ─── Init ─────────────────────────────────────────────
+syncThemeBtn();
 pct(); renderEditor(); renderSidebar(); renderDonut();
 tog('r2008'); tog('r2020');
 </script>
