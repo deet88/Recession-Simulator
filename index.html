@@ -854,6 +854,9 @@ function contribs(r) {
 // Per-asset dollar change at the trough month on the current Real/Dividend basis,
 // so per-asset figures always sum to makePath(r,'absolute',realMode,divMode)[r.dur]-tot().
 function assetImpact(r,k,a) {
+  // Crypto didn't exist pre-2009 (d=dy=0 by convention) — real-mode deflation
+  // would otherwise turn that "didn't exist" zero into a phantom gain/loss.
+  if(k==='crypto' && (r.d.crypto??0)===0 && (r.dy.crypto??0)===0) return 0;
   let v=a.value*(1+(r.d[k]??0)/100);
   if(divMode) v+=a.value*((r.dy[k]||0)/100)*(r.dur/12);
   if(realMode) v/=Math.pow(1+r.inf/100,r.dur/12);
