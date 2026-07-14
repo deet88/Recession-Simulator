@@ -874,12 +874,15 @@ function fmtRec(rec) {
   const y=rec/12;
   return rec>=240 ? (Number.isInteger(y)?y:y.toFixed(1))+' yrs' : rec+' mo';
 }
+
+const LONG_RUN_INFLATION = 3; // long-run CPI average assumed once a recession's own high/low inflation episode ends
+
 function makePath(r, mode, real, divs) {
   const t=tot(), d=dd(r), trough=t*(1+d/100), pts=[];
   const nomEnd=r.dur+r.rec;
-  // In real mode, extend only when the 7% nominal growth assumption outpaces inflation.
-  // High-inflation recessions (e.g. 1980 at 13.5%) can't recover at 7% nominal — don't extend.
-  const canRecover=real && r.inf < 7;
+  // In real mode, extend when 7% nominal growth exceeds the long-run inflation assumption.
+  // During the recession itself, apply the actual r.inf; after recovery, assume normalization.
+  const canRecover=real && LONG_RUN_INFLATION < 7;
   const limit=canRecover ? nomEnd+180 : nomEnd;
   for(let m=0;m<=limit;m++){
     let raw;
@@ -895,11 +898,23 @@ function makePath(r, mode, real, divs) {
     if(divs) val+=Object.entries(ALLOC).reduce((sum,[k,a])=>sum+a.value*((r.dy[k]||0)/100)*(m/12),0);
     // Deflation (negative inf) only ran during the downturn itself (e.g. 1929–33);
     // compounding it across a multi-decade recovery would inflate real values absurdly.
-    if(real) val/=Math.pow(1+r.inf/100,(r.inf<0?Math.min(m,r.dur):m)/12);
+    // For positive inflation: apply r.inf through nomEnd, then normalize to LONG_RUN_INFLATION after.
+    if(real){
+      if(r.inf<0){
+        val/=Math.pow(1+r.inf/100,Math.min(m,r.dur)/12);
+      } else if(m<=nomEnd){
+        val/=Math.pow(1+r.inf/100,m/12);
+      } else {
+        val/=Math.pow(1+r.inf/100,nomEnd/12)*Math.pow(1+LONG_RUN_INFLATION/100,(m-nomEnd)/12);
+      }
+    }
     pts.push(mode==='indexed'?(t>0?((val/t)-1)*100:0):val);
     if(canRecover && m>nomEnd){
       const v=pts[pts.length-1];
-      if(mode==='indexed' ? v>=0 : v>=t) break;
+      if(mode==='indexed' ? v>=0 : v>=t){
+        pts[pts.length-1] = mode==='indexed' ? 0 : t;
+        break;
+      }
     }
   }
   return pts;
