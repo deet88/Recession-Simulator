@@ -43,10 +43,13 @@ const localStorage = { _d:{}, getItem(k){ return this._d[k] ?? null; }, setItem(
 function matchMedia(){ return { matches:false, addEventListener(){} }; }
 function Chart(){ return { destroy(){}, update(){}, data:{}, options:{} }; }
 Chart.defaults = {};
-const window = { location: { hash: '' }, addEventListener(){}, history: { replaceState(){} } };
-const location = window.location;
-const history = window.history;
-const navigator = { clipboard: { writeText(){} } };
+// JXA has no timers or DOM globals; the app only uses them for debounce and history.
+function setTimeout(){ return 0; } function clearTimeout(){}
+function addEventListener(){}
+const location = { hash: '', href: '' };
+const history = { replaceState(_a, _b, url){ location.hash = String(url); } };
+const navigator = {};
+const window = { location, history, addEventListener, setTimeout, clearTimeout };
 
 // Grab the last <script> block (the app logic) and expose its internals.
 const blocks = src.split('<script>');
@@ -54,6 +57,21 @@ const appSrc = blocks[blocks.length - 1].split('</script>')[0];
 const EXPOSE = `;({ simulate, sim, makePath, assetImpact, contribs, extremeIndex, recoveryMonths,
   pathExtreme, tot, pct, existed, deflator, fmtRec, cp,
   ALLOC, BASE, PRESETS, RECESSIONS, LONG_RUN_INFLATION, POST_RECOVERY_GROWTH,
+  stateToHash, applyHash, benchPath, benchDrawdown, simulate,
+  state: () => ({ chartMode, realMode, divMode, logScale, withdrawAmt,
+                  withdrawInflate, rebalanceOn, benchOn,
+                  selected: Array.from(selected).sort().join(','),
+                  alloc: Object.keys(ALLOC).map(k => k+':'+Math.round(ALLOC[k].value)).join(',') }),
+  setState: (o) => { if (o.chartMode !== undefined) chartMode = o.chartMode;
+                     if (o.realMode !== undefined) realMode = o.realMode;
+                     if (o.divMode !== undefined) divMode = o.divMode;
+                     if (o.logScale !== undefined) logScale = o.logScale;
+                     if (o.withdrawAmt !== undefined) withdrawAmt = o.withdrawAmt;
+                     if (o.withdrawInflate !== undefined) withdrawInflate = o.withdrawInflate;
+                     if (o.rebalanceOn !== undefined) rebalanceOn = o.rebalanceOn;
+                     if (o.benchOn !== undefined) benchOn = o.benchOn;
+                     if (o.selected !== undefined) selected = new Set(o.selected);
+                     simCacheKey = ''; },
   setModes: (rm, dm) => { realMode = rm; divMode = dm; simCacheKey = ''; },
   setAlloc: (a) => { ALLOC = a; simCacheKey = ''; },
 })`;
@@ -62,8 +80,7 @@ let A;
 try {
   A = eval(appSrc + EXPOSE);
 } catch (e) {
-  console.log('FATAL: index.html script block did not evaluate — ' + e);
-  $.exit(1);
+  throw new Error('FATAL: index.html script block did not evaluate — ' + e);
 }
 const KEYS = Object.keys(A.BASE);
 const MODES = [[false,false],[true,false],[false,true],[true,true]];
@@ -184,8 +201,12 @@ for (const [rm, dm] of MODES) {
     ok('extreme/' + tag + ' is the window extreme',
        near(win[ex], isDown ? Math.min.apply(null, win) : Math.max.apply(null, win), 0.01));
 
-    // (f) recovery figure agrees with where the line actually crosses baseline
+    // (f) recovery figure agrees with where the line actually crosses baseline.
+    //     In nominal price-return mode every recession returns to baseline by
+    //     construction, so a null there is a bug, not a modelling outcome.
     const rec = A.recoveryMonths(r);
+    if (!rm && !dm) ok('recovery/' + tag + ' is reported at all', rec !== null,
+                       'reported "not recovered" for a path that reaches baseline');
     if (rec !== null) {
       ok('recovery/' + tag + ' crosses at reported month', s.total[ex + rec] >= t - 0.01);
       ok('recovery/' + tag + ' not earlier than reported',
@@ -250,6 +271,86 @@ for (const r of A.RECESSIONS) {
   ok('edge/100% large cap tracks the S&P figure', near(dd08, r08.spx, 0.05),
      'portfolio ' + dd08.toFixed(2) + '% vs spx ' + r08.spx + '%');
   A.setAlloc(A.cp(A.BASE));
+}
+
+// ── 9. Shared-link state survives a round trip ──────────────────────────────
+{
+  const alloc = A.cp(A.BASE);
+  alloc.largeCap.value = 123456; alloc.crypto.value = 7890; alloc.cash.value = 4321;
+  A.setAlloc(alloc);
+  A.setState({ chartMode:'indexed', realMode:true, divMode:true, logScale:false,
+               withdrawAmt:3500, withdrawInflate:false, rebalanceOn:true, benchOn:true,
+               selected:['depression','r2020'] });
+  const before = A.state(), hash = A.stateToHash();
+
+  // Wipe every field, then restore from the hash alone.
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ chartMode:'absolute', realMode:false, divMode:false, logScale:false,
+               withdrawAmt:0, withdrawInflate:true, rebalanceOn:false, benchOn:false,
+               selected:[] });
+  location.hash = '#' + hash;
+  ok('url/hash applies', A.applyHash() === true);
+  const after = A.state();
+  for (const k of Object.keys(before)) {
+    ok('url/round-trips ' + k, before[k] === after[k], 'before ' + before[k] + ' after ' + after[k]);
+  }
+  // A malformed or foreign link must not throw or corrupt state.
+  let threw = false;
+  for (const bad of ['', '#', '#a=x.y.z&s=nope&m=q&f=zzz&w=abc', '#a=1.2&s=&f=1']) {
+    location.hash = bad;
+    try { A.applyHash(); A.RECESSIONS.forEach(r => A.sim(r)); } catch (e) { threw = true; }
+  }
+  ok('url/malformed hash is survivable', !threw);
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ chartMode:'absolute', realMode:false, divMode:false, logScale:false,
+               withdrawAmt:0, withdrawInflate:true, rebalanceOn:false, benchOn:false,
+               selected:['r2008'] });
+}
+
+// ── 10. Withdrawals, rebalancing and the benchmark behave ───────────────────
+{
+  A.setAlloc(A.cp(A.BASE));
+  const t = A.tot(), r08 = A.RECESSIONS.find(x => x.id === 'r2008');
+
+  // Zero withdrawal and no rebalancing must leave the original result untouched.
+  A.setState({ withdrawAmt:0, rebalanceOn:false, realMode:false, divMode:false });
+  const basePE = A.pathExtreme(r08);
+  A.setState({ withdrawAmt:0, rebalanceOn:false });
+  ok('feature/zero withdrawal is a no-op', near(A.pathExtreme(r08), basePE, 0.01));
+
+  // Drawing money down through a crash must leave you worse off.
+  A.setState({ withdrawAmt:5000 });
+  ok('feature/withdrawal deepens the drawdown', A.pathExtreme(r08) < basePE - 1000,
+     'with draw $' + Math.round(A.pathExtreme(r08)) + ' vs $' + Math.round(basePE));
+  ok('feature/withdrawal never goes negative',
+     A.sim(r08).total.every(v => v >= -0.01));
+
+  // A withdrawal large enough to outrun the portfolio must report depletion, once.
+  A.setState({ withdrawAmt:200000 });
+  const dep = A.sim(r08).depletedAt;
+  ok('feature/huge withdrawal depletes', dep !== null && dep > 0, 'depletedAt=' + dep);
+  ok('feature/depleted portfolio stays at zero',
+     A.sim(r08).total.slice(dep).every(v => v < 1));
+  A.setState({ withdrawAmt:0 });
+
+  // Rebalancing must move the result without breaking the reconciliation.
+  A.setState({ rebalanceOn:true });
+  const KEYS2 = Object.keys(A.ALLOC);
+  ok('feature/rebalanced result still reconciles',
+     near(KEYS2.reduce((s,k) => s + A.assetImpact(r08,k), 0), A.pathExtreme(r08) - t, 0.01));
+  ok('feature/rebalancing changes the outcome', !near(A.pathExtreme(r08), basePE, 1));
+  A.setState({ rebalanceOn:false });
+
+  // The benchmark is the S&P alone: with an all-large-cap book they must coincide.
+  const solo = A.cp(A.BASE);
+  Object.keys(solo).forEach(k => solo[k].value = k === 'largeCap' ? t : 0);
+  A.setAlloc(solo);
+  ok('feature/benchmark matches an all-large-cap book',
+     near(A.benchDrawdown(r08), (A.pathExtreme(r08)/t - 1)*100, 0.01));
+  A.setAlloc(A.cp(A.BASE));
+  ok('feature/benchmark beats a diversified book in 2008',
+     A.benchDrawdown(r08) < (A.pathExtreme(r08)/t - 1)*100,
+     'bench ' + A.benchDrawdown(r08).toFixed(2) + '% vs mix ' + ((A.pathExtreme(r08)/t-1)*100).toFixed(2) + '%');
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────

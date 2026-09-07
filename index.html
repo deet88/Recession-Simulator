@@ -247,6 +247,12 @@ tbody tr:hover td { background: var(--hover); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
 .sidebar-group { display: flex; flex-direction: column; gap: 4px; }
+.withdraw-ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chk { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.chk input { accent-color: var(--accent); cursor: pointer; }
+.alloc-footer-right { text-align: right; }
+.deplete-warn { background: rgba(240,79,90,.09); border: 1px solid rgba(240,79,90,.28);
+  border-radius: 6px; padding: 6px 9px; font-size: 11px; color: var(--red); margin-top: 10px; }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* Mobile */
@@ -330,6 +336,7 @@ tbody tr:hover td { background: var(--hover); }
         <div class="hstat-value dyn" id="headerTotal">$1,000,000</div>
       </div>
     </div>
+    <button class="btn" id="copyBtn" onclick="copyLink()" title="Copy a link that restores this exact allocation, selection and settings">Copy link</button>
     <button class="btn" id="themeBtn" onclick="toggleTheme()" title="Switch between dark and light mode"></button>
   </div>
 </header>
@@ -364,6 +371,20 @@ tbody tr:hover td { background: var(--hover); }
         <button class="mode-btn" id="btn-log" onclick="setLogScale(true)" title="Logarithmic Y-axis — use when outliers (like the Great Depression) compress other lines into a flat band">Log</button>
       </div>
     </div>
+    <div class="sidebar-group">
+      <div class="sidebar-label">Rebalance</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-reb-off" onclick="setRebalance(false)" title="Hold the allocation as-is. Winners and losers drift, so a crash leaves you with a different mix than you started with">None</button>
+        <button class="mode-btn" id="btn-reb-on" onclick="setRebalance(true)" title="Sell what held up and buy what fell, once a year, restoring your target weights — the discipline most investors find hardest to follow in a crash">Annual</button>
+      </div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-label">Benchmark</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-bench-off" onclick="setBench(false)" title="Show your portfolio only">Off</button>
+        <button class="mode-btn" id="btn-bench-on" onclick="setBench(true)" title="Overlay the same starting capital held entirely in the S&amp;P 500, on the same basis — the comparison that shows whether diversifying actually helped">vs S&amp;P</button>
+      </div>
+    </div>
     <div class="sidebar-label">Presets</div>
     <div class="preset-grid">
       <button class="btn btn-preset" title="20% equity, 60% fixed income, 20% real assets/cash" onclick="setPreset('conservative')">Conservative</button>
@@ -395,8 +416,21 @@ tbody tr:hover td { background: var(--hover); }
       </div>
       <div class="alloc-cols" id="allocGrid"></div>
       <div class="alloc-footer">
-        <span class="alloc-footer-label">Total Portfolio Value</span>
-        <span class="alloc-total" id="allocTotal">$1,000,000</span>
+        <div class="withdraw-ctl">
+          <label class="alloc-footer-label" for="withdrawInput">Monthly withdrawal</label>
+          <div class="alloc-input-wrap">
+            <span class="alloc-prefix">$</span>
+            <input class="alloc-input" id="withdrawInput" type="number" min="0" step="500" value="0"
+              oninput="onWithdraw(this.value)"
+              title="Money drawn out every month during the recession — the sequence-of-returns question. Selling into a drawdown locks in losses that a recovering portfolio never gets back.">
+          </div>
+          <label class="chk"><input type="checkbox" id="withdrawInflate" checked
+            onchange="onWithdrawInflate(this.checked)"> grow with inflation</label>
+        </div>
+        <div class="alloc-footer-right">
+          <div class="alloc-footer-label">Total Portfolio Value</div>
+          <div class="alloc-total" id="allocTotal">$1,000,000</div>
+        </div>
       </div>
     </div>
 
@@ -445,7 +479,7 @@ tbody tr:hover td { background: var(--hover); }
         <table>
           <thead><tr>
             <th>Recession</th><th>Period</th><th>Duration</th>
-            <th>Your Drawdown</th><th>Dollar Impact</th><th>Recovery</th><th>S&amp;P 500</th>
+            <th>Your Drawdown</th><th>Dollar Impact</th><th>Recovery</th><th>S&amp;P 500</th><th>vs S&amp;P</th>
           </tr></thead>
           <tbody id="tableBody"></tbody>
         </table>
@@ -777,6 +811,7 @@ const RECESSIONS = [
 
 // ─── State ────────────────────────────────────────────
 let selected = new Set(), chartMode = 'absolute', realMode = false, divMode = false, logScale = false;
+let withdrawAmt = 0, withdrawInflate = true, rebalanceOn = false, benchOn = false;
 let mainCh = null, assetCh = null, donutCh = null;
 
 // ─── Theme ────────────────────────────────────────────
@@ -844,11 +879,8 @@ function setPreset(name) {
     el.classList.add('flashed');
   });
 }
-function refreshAll() {
-  renderMainChart(); renderDonut();
-  const f=RECESSIONS.find(r=>selected.has(r.id));
-  if(f) renderAssetChart(f);
-}
+// renderMainChart already cascades to metrics, table and the asset chart.
+function refreshAll() { renderDonut(); renderMainChart(); }
 
 // ─── Simulation engine ────────────────────────────────
 // Single source of truth. The chart line, the headline drawdown, the per-asset bars
@@ -874,59 +906,109 @@ function deflator(r, m, nomEnd) {
        * Math.pow(1 + LONG_RUN_INFLATION/100, (m - nomEnd)/12);
 }
 
+// Price multiplier for one asset at month m, relative to its starting value.
+// Splitting this out lets the walk below advance balances by a monthly return, which
+// is what makes withdrawals and rebalancing expressible at all.
+function shapeAt(r, k, m, nomEnd) {
+  if (!existed(r, k)) return 1;
+  const dk = (r.d[k] ?? 0) / 100;
+  if (m <= r.dur) { const e = r.dur === 0 ? 1 : m/r.dur; return 1 + dk*(e*e*(3 - 2*e)); }
+  if (m <= nomEnd) return (1 + dk) + (-dk)*Math.sqrt((m - r.dur)/r.rec);
+  return Math.pow(1 + POST_RECOVERY_GROWTH/100, (m - nomEnd)/12);
+}
+
 // Walks one recession month by month carrying a balance per asset class.
-// Summed, the per-asset price curves reproduce the old portfolio-level curve exactly.
+// With no withdrawal and no rebalancing the summed curves reproduce the original
+// portfolio-level curve exactly (verify.js asserts this point by point).
 function simulate(r, o) {
   const alloc = o.alloc || ALLOC, real = !!o.real, divs = !!o.divs;
+  const draw = Math.max(0, o.withdraw || 0), drawInf = !!o.drawInflate, reb = !!o.rebalance;
   const keys = Object.keys(alloc);
   const start = keys.reduce((s,k) => s + alloc[k].value, 0);
   const nomEnd = r.dur + r.rec;
   // Real mode runs past the nominal window: purchasing power can stay below baseline
   // long after the nominal price level has recovered.
   const limit = real ? nomEnd + 180 : nomEnd;
-  const divCash = {}, byAsset = {};
-  keys.forEach(k => { divCash[k] = 0; byAsset[k] = []; });
+
+  // bal = invested balance; cash = dividends received but not reinvested. Kept apart
+  // because returns apply to one and not the other, and per asset so that the
+  // breakdown always reconciles to the headline.
+  const bal = {}, cash = {}, byAsset = {}, target = {};
+  keys.forEach(k => { bal[k] = alloc[k].value; cash[k] = 0; byAsset[k] = [];
+                      target[k] = start > 0 ? alloc[k].value/start : 0; });
   const total = [];
+  let depletedAt = null;
+
   for (let m = 0; m <= limit; m++) {
+    if (m > 0) {
+      for (const k of keys) {
+        const prev = shapeAt(r, k, m-1, nomEnd);
+        bal[k] *= prev === 0 ? 1 : shapeAt(r, k, m, nomEnd)/prev;
+        if (divs) cash[k] += bal[k] * ((r.dy[k] || 0)/100) / 12;
+      }
+      // Rebalance the invested portion back to target weights each year. Assets that
+      // did not exist in this era are excluded — you cannot rebalance into them — so
+      // the remaining targets are renormalised over the live ones.
+      if (reb && m % 12 === 0) {
+        const live = keys.filter(k => existed(r, k));
+        const pool = live.reduce((s,k) => s + bal[k], 0);
+        const wsum = live.reduce((s,k) => s + target[k], 0);
+        if (pool > 0 && wsum > 0) live.forEach(k => { bal[k] = pool * (target[k]/wsum); });
+      }
+      // Withdrawal comes out of dividend cash first, then by selling pro rata.
+      if (draw > 0) {
+        let need = drawInf ? draw * Math.pow(1 + r.inf/100, m/12) : draw;
+        const pos = keys.map(k => bal[k] + cash[k]);
+        const avail = pos.reduce((a,b) => a+b, 0);
+        if (need >= avail) {
+          need = avail;
+          if (depletedAt === null) depletedAt = m;
+        }
+        if (avail > 0) keys.forEach((k,i) => {
+          let share = need * (pos[i]/avail);
+          const fromCash = Math.min(cash[k], share);
+          cash[k] -= fromCash; share -= fromCash;
+          bal[k] = Math.max(0, bal[k] - share);
+        });
+      }
+    }
     const defl = real ? deflator(r, m, nomEnd) : 1;
     let sum = 0;
     for (const k of keys) {
-      const v0 = alloc[k].value;
-      // An asset that did not exist in this era contributes its notional balance
-      // unchanged for the whole run: no return, no yield, no inflation exposure.
-      if (!existed(r, k)) { byAsset[k].push(v0); sum += v0; continue; }
-      const trough = v0 * (1 + (r.d[k] ?? 0)/100);
-      let price;
-      if (m <= r.dur) {
-        const e = r.dur === 0 ? 1 : m/r.dur;
-        price = v0 + (trough - v0) * (e*e*(3 - 2*e));                 // smoothstep decline
-      } else if (m <= nomEnd) {
-        price = trough + (v0 - trough) * Math.sqrt((m - r.dur)/r.rec); // sqrt recovery
-      } else {
-        price = v0 * Math.pow(1 + POST_RECOVERY_GROWTH/100, (m - nomEnd)/12);
-      }
-      // Dividends accrue monthly on the CURRENT balance and are held as cash, not
-      // reinvested. Paying a fixed yield on the pre-crash balance (as this once did)
-      // credited a portfolio down 86% with 112% of its starting value in income.
-      if (divs && m > 0) divCash[k] += price * ((r.dy[k] || 0)/100) / 12;
-      const v = (price + (divs ? divCash[k] : 0)) / defl;
+      // A dormant asset carries no purchasing-power exposure, so it is not deflated.
+      const v = (bal[k] + cash[k]) / (existed(r, k) ? defl : 1);
       byAsset[k].push(v);
       sum += v;
     }
     total.push(sum);
-    if (real && m > nomEnd && sum >= start) break; // real purchasing power restored
+    if (real && m > nomEnd && sum >= start - Math.max(0.01, start*1e-9)) break; // real purchasing power restored
   }
-  return { total, byAsset, start, nomEnd };
+  return { total, byAsset, start, nomEnd, depletedAt };
 }
 
 // One simulation per recession per render pass — chart, metrics and table share it.
 let simCache = new Map(), simCacheKey = '';
+function simOpts() {
+  return { real:realMode, divs:divMode, withdraw:withdrawAmt,
+           drawInflate:withdrawInflate, rebalance:rebalanceOn };
+}
 function sim(r) {
   const key = Object.entries(ALLOC).map(([k,a]) => k+':'+a.value).join(',')
-            + '|' + realMode + '|' + divMode;
+            + '|' + [realMode, divMode, withdrawAmt, withdrawInflate, rebalanceOn].join('|');
   if (key !== simCacheKey) { simCache = new Map(); simCacheKey = key; }
-  if (!simCache.has(r.id)) simCache.set(r.id, simulate(r, {real:realMode, divs:divMode}));
+  if (!simCache.has(r.id)) simCache.set(r.id, simulate(r, simOpts()));
   return simCache.get(r.id);
+}
+
+// The S&P 500 alone, on the same basis and the same starting capital — the reference
+// the whole tool is implicitly arguing against.
+function benchPath(r, mode) {
+  const t = tot();
+  const only = {}; Object.keys(ALLOC).forEach(k => only[k] = {value: k==='largeCap' ? t : 0});
+  const s = simulate(r, Object.assign(simOpts(), {alloc: only}));
+  return mode === 'indexed'
+    ? s.total.map(v => t > 0 ? ((v/t) - 1)*100 : 0)
+    : s.total;
 }
 
 // ─── Derived figures ──────────────────────────────────
@@ -949,12 +1031,22 @@ function contribs(r) {
   })).sort((a,b) => a.dollarImpact - b.dollarImpact);
 }
 
+// The S&P-only drawdown on the current basis, so "did diversifying help?" compares
+// like with like — r.spx is the raw nominal price fall and is not comparable once
+// Real, +Dividends, withdrawals or rebalancing are in play.
+function benchDrawdown(r) {
+  const t = tot(); if (t <= 0) return 0;
+  const win = benchPath(r,'absolute').slice(0, r.dur + 1);
+  const mn = Math.min(...win), mx = Math.max(...win);
+  return ((((t - mn) >= (mx - t) ? mn : mx) / t) - 1) * 100;
+}
+
 // Months from the extreme back to the starting value on the current basis, so the
 // printed figure matches where the drawn line actually returns to baseline.
 // null when it never recovers inside the modelled window.
 function recoveryMonths(r) {
-  const s = sim(r), from = extremeIndex(r);
-  for (let m = from; m < s.total.length; m++) if (s.total[m] >= s.start) return m - from;
+  const s = sim(r), from = extremeIndex(r), eps = Math.max(0.01, s.start * 1e-9);
+  for (let m = from; m < s.total.length; m++) if (s.total[m] >= s.start - eps) return m - from;
   return null;
 }
 
@@ -1028,11 +1120,20 @@ function renderMainChart() {
       borderColor:r.color, backgroundColor:r.color+'15',
       borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:0, fill:chartMode==='indexed' };
   });
+  if(benchOn && recs.length===1){
+    const bp=benchPath(recs[0],chartMode);
+    if(bp.length-1>maxM) maxM=bp.length-1;
+    datasets.push({ label:'S&P 500 only', data:bp.map((v,i)=>({x:i,y:v})),
+      borderColor:C.muted, borderWidth:1.5, borderDash:[6,4],
+      pointRadius:0, pointHoverRadius:4, tension:0, fill:false });
+  }
   if(chartMode==='indexed') datasets.push({
     label:'Baseline', data:Array.from({length:maxM+1},(_,i)=>({x:i,y:0})),
     borderColor:C.baseline, borderWidth:1, borderDash:[5,5], pointRadius:0, fill:false });
 
-  const modeTag=[realMode?'Real':'',divMode?'+Div':''].filter(Boolean).join(' ');
+  const modeTag=[realMode?'Real':'',divMode?'+Div':'',rebalanceOn?'Rebal':'',
+    withdrawAmt>0?'−$'+Math.round(withdrawAmt).toLocaleString()+'/mo':'',
+    benchOn&&recs.length!==1?'benchmark needs a single recession':''].filter(Boolean).join(' · ');
   document.getElementById('chartSub').textContent = (recs.length===1
     ? `${recs[0].name} · ${maxM} months total`
     : `${recs.length} recessions compared`) + (modeTag ? ` · ${modeTag}` : '');
@@ -1070,7 +1171,7 @@ function renderMainChart() {
     }
   }});
   renderDetailPanel(recs.length===1 ? recs[0] : null);
-  renderMetrics(recs); renderTable(recs);
+  renderMetrics(recs); renderTable(recs); syncURL();
   if(recs.length>0) renderAssetChart(recs[0]);
 }
 
@@ -1084,6 +1185,8 @@ function renderMetrics(recs) {
   grid.innerHTML=recs.map(r=>{
     const troughVal=pathExtreme(r);
     const d=t>0?((troughVal/t)-1)*100:0, impact=troughVal-t, isPos=d>=0;
+    // Positive = your mix held up better than the index over the same window.
+    const bench=benchDrawdown(r), edge=d-bench, dep=sim(r).depletedAt;
     // Best/worst by dollar impact (not raw %) among non-zero positions,
     // on the same Real/Dividend basis as the headline so the two can't contradict.
     // Assets that didn't move (or didn't exist yet — pre-2009 crypto) are excluded.
@@ -1107,9 +1210,14 @@ function renderMetrics(recs) {
           <span class="mrow-value">${extremeIndex(r)} mo</span></div>
         <div class="mrow"><span class="mrow-label">Recovery / normalize</span>
           <span class="mrow-value">${fmtRec(recoveryMonths(r))}</span></div>
-        <div class="mrow"><span class="mrow-label">S&amp;P 500</span>
+        <div class="mrow"><span class="mrow-label">S&amp;P 500 (headline)</span>
           <span class="mrow-value ${r.spx>0?'grn':'red'}">${r.spx>0?'+':''}${r.spx}%</span></div>
+        <div class="mrow"><span class="mrow-label">S&amp;P 500, same basis</span>
+          <span class="mrow-value ${bench>=0?'grn':'red'}">${bench>=0?'+':''}${bench.toFixed(1)}%</span></div>
+        <div class="mrow"><span class="mrow-label">Your mix vs that</span>
+          <span class="mrow-value ${edge>=0?'grn':'red'}">${edge>=0?'+':''}${edge.toFixed(1)} pts${edge>=0?' better':' worse'}</span></div>
       </div>
+      ${dep!==null?`<div class="deplete-warn">Portfolio exhausted at month ${dep} — the withdrawal outlasted the recovery.</div>`:''}
       ${best&&worst&&best!==worst?`
       <div class="metric-divider"></div>
       <div class="metric-rows">
@@ -1174,6 +1282,7 @@ function renderTable(recs) {
   document.getElementById('tableBody').innerHTML=recs.map(r=>{
     const troughVal=pathExtreme(r);
     const d=t>0?((troughVal/t)-1)*100:0,impact=troughVal-t,isPos=d>=0;
+    const edge=d-benchDrawdown(r);   // positive = your mix held up better
     const rec=fmtRec(recoveryMonths(r));
     return `<tr>
       <td><div class="cell-rec"><div class="cell-dot" style="background:${r.color}"></div>${r.name}</div></td>
@@ -1183,6 +1292,7 @@ function renderTable(recs) {
       <td class="${isPos?'cell-pos':'cell-neg'}">${isPos?'+':'–'}$${Math.abs(Math.round(impact)).toLocaleString()}</td>
       <td>${rec}</td>
       <td class="${r.spx>0?'cell-pos':'cell-neg'}">${r.spx>0?'+':''}${r.spx}%</td>
+      <td class="${edge>=0?'cell-pos':'cell-neg'}">${edge>=0?'+':''}${edge.toFixed(1)} pts</td>
     </tr>`;
   }).join('');
 }
@@ -1209,31 +1319,35 @@ function hov(id){
 }
 function selectAll(){ RECESSIONS.forEach(r=>selected.add(r.id)); renderSidebar(); renderMainChart(); }
 function clearAll(){ selected.clear(); renderSidebar(); renderMainChart(); }
-function setMode(m){
-  chartMode=m;
-  document.getElementById('btn-absolute').classList.toggle('active',m==='absolute');
-  document.getElementById('btn-indexed').classList.toggle('active',m==='indexed');
+function setMode(m){ chartMode=m; syncControls(); renderMainChart(); }
+function setRealMode(on){ realMode=on; syncControls(); renderMainChart(); }
+function setDivMode(on){ divMode=on; syncControls(); renderMainChart(); }
+// Every control reads its pressed state back from the state variables, so restoring
+// a shared link and clicking a button follow the same path.
+const TOGGLES = [
+  ['btn-absolute', () => chartMode==='absolute'], ['btn-indexed', () => chartMode==='indexed'],
+  ['btn-nominal',  () => !realMode],              ['btn-real',    () => realMode],
+  ['btn-price',    () => !divMode],               ['btn-total',   () => divMode],
+  ['btn-linear',   () => !logScale],              ['btn-log',     () => logScale],
+  ['btn-reb-off',  () => !rebalanceOn],           ['btn-reb-on',  () => rebalanceOn],
+  ['btn-bench-off',() => !benchOn],               ['btn-bench-on',() => benchOn],
+];
+function syncControls(){
+  TOGGLES.forEach(([id, on]) => {
+    const el = document.getElementById(id);
+    const active = on();
+    el.classList.toggle('active', active);
+    el.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  document.getElementById('withdrawInput').value = withdrawAmt || 0;
+  document.getElementById('withdrawInflate').checked = withdrawInflate;
   syncLogAvailability();
-  renderMainChart();
 }
-function setRealMode(on){
-  realMode=on;
-  document.getElementById('btn-nominal').classList.toggle('active',!on);
-  document.getElementById('btn-real').classList.toggle('active',on);
-  renderMainChart();
-}
-function setDivMode(on){
-  divMode=on;
-  document.getElementById('btn-price').classList.toggle('active',!on);
-  document.getElementById('btn-total').classList.toggle('active',on);
-  renderMainChart();
-}
-function setLogScale(on){
-  logScale=on;
-  document.getElementById('btn-linear').classList.toggle('active',!on);
-  document.getElementById('btn-log').classList.toggle('active',on);
-  renderMainChart();
-}
+function onWithdraw(v){ withdrawAmt=Math.max(0,parseFloat(v)||0); refreshAll(); }
+function onWithdrawInflate(on){ withdrawInflate=on; refreshAll(); }
+function setRebalance(on){ rebalanceOn=on; syncControls(); refreshAll(); }
+function setBench(on){ benchOn=on; syncControls(); renderMainChart(); }
+function setLogScale(on){ logScale=on; syncControls(); renderMainChart(); }
 // A log axis is undefined over the negative values % Change produces, so the scale
 // silently stays linear there. Disable the control rather than let it look applied.
 function syncLogAvailability(){
@@ -1243,13 +1357,83 @@ function syncLogAvailability(){
   btn.title = off
     ? 'Log scale is unavailable in % Change mode — the axis crosses zero and negative values have no logarithm'
     : 'Logarithmic Y-axis — use when outliers (like the Great Depression) compress other lines into a flat band';
-  if(off && logScale) setLogScale(false);
+  if(off && logScale){ logScale=false;
+    document.getElementById('btn-linear').classList.add('active');
+    document.getElementById('btn-log').classList.remove('active'); }
+}
+
+// ─── Shareable state ──────────────────────────────────
+// A carefully built allocation used to vanish on reload, and there was no way to send
+// someone a scenario. The hash carries the whole model state.
+const ORDER = Object.keys(BASE);
+const FLAGS = [
+  () => realMode, () => divMode, () => logScale,
+  () => withdrawInflate, () => rebalanceOn, () => benchOn,
+];
+function stateToHash(){
+  const parts = [
+    'a=' + ORDER.map(k => Math.round(ALLOC[k].value)).join('.'),
+    's=' + RECESSIONS.filter(r => selected.has(r.id)).map(r => r.id).join(','),
+    'm=' + (chartMode === 'indexed' ? 'i' : 'a'),
+    'f=' + FLAGS.map(f => f() ? 1 : 0).join(''),
+  ];
+  if (withdrawAmt > 0) parts.push('w=' + Math.round(withdrawAmt));
+  return parts.join('&');
+}
+// Hand-rolled rather than URLSearchParams so the link stays readable — commas and
+// dots survive unescaped. Every value read below is validated before use.
+function hashParams(){
+  const out = {};
+  location.hash.replace(/^#/, '').split('&').forEach(kv => {
+    const i = kv.indexOf('=');
+    if (i > 0) out[kv.slice(0, i)] = kv.slice(i + 1);
+  });
+  return out;
+}
+function applyHash(){
+  if (!location.hash.replace(/^#/, '')) return false;
+  const p = hashParams();
+  if (p.a !== undefined) {
+    const vals = p.a.split('.');
+    // Tolerate a link written by a version with a different asset list.
+    ORDER.forEach((k,i) => {
+      const v = parseFloat(vals[i]);
+      if (isFinite(v) && v >= 0) ALLOC[k].value = v;
+    });
+  }
+  if (p.s !== undefined) {
+    selected = new Set(p.s.split(',').filter(id => RECESSIONS.some(r => r.id === id)));
+  }
+  if (p.m !== undefined) chartMode = p.m === 'i' ? 'indexed' : 'absolute';
+  if (p.f !== undefined && p.f.length >= FLAGS.length) {
+    [realMode, divMode, logScale, withdrawInflate, rebalanceOn, benchOn]
+      = FLAGS.map((_,i) => p.f[i] === '1');
+  }
+  const w = parseFloat(p.w);
+  withdrawAmt = isFinite(w) && w > 0 ? w : 0;
+  return true;
+}
+let urlTimer = null;
+function syncURL(now){
+  clearTimeout(urlTimer);
+  const write = () => history.replaceState(null, '', '#' + stateToHash());
+  if (now) write(); else urlTimer = setTimeout(write, 250);
+}
+function copyLink(){
+  syncURL(true);
+  const btn = document.getElementById('copyBtn'), old = 'Copy link';
+  const done = t => { btn.textContent = t; setTimeout(() => btn.textContent = old, 1600); };
+  if (navigator.clipboard) navigator.clipboard.writeText(location.href).then(() => done('Copied'), () => done('⌘C to copy'));
+  else done('⌘C to copy');
 }
 
 // ─── Init ─────────────────────────────────────────────
-syncThemeBtn(); syncLogAvailability(); renderProxyExceptions();
-pct(); renderEditor(); renderSidebar(); renderDonut();
-tog('r2008'); tog('r2020');
+syncThemeBtn(); renderProxyExceptions();
+// A shared link wins; otherwise open on the two recessions most people recognise.
+if (!applyHash()) { selected.add('r2008'); selected.add('r2020'); }
+syncControls();
+pct(); renderEditor(); renderSidebar(); renderDonut(); renderMainChart();
+addEventListener('hashchange', () => { if (applyHash()) { syncControls(); renderEditor(); renderSidebar(); renderDonut(); renderMainChart(); } });
 </script>
 </body>
 </html>
