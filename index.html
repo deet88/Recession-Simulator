@@ -78,6 +78,8 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
   background: transparent; color: var(--muted); font-size: 11px; font-weight: 600;
   cursor: pointer; transition: all .15s; }
 .mode-btn.active { background: var(--accent); color: #fff; }
+.mode-btn:disabled { opacity: .38; cursor: not-allowed; }
+.mode-btn:disabled.active { background: transparent; color: var(--muted); }
 .rec-list { display: flex; flex-direction: column; gap: 2px; }
 .rec-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px;
   border-radius: 7px; cursor: pointer; transition: background .12s;
@@ -428,9 +430,7 @@ tbody tr:hover td { background: var(--hover); }
       <div class="panel">
         <div class="panel-title" style="margin-bottom:14px;">Dollar Impact by Asset Class</div>
         <div class="chart-wrap" style="height:290px;"><canvas id="assetChart"></canvas></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:10px;">
-          Shows first selected recession. Hover sidebar to preview.
-        </div>
+        <div id="assetNote" style="font-size:11px;color:var(--muted);margin-top:10px;"></div>
       </div>
       <div class="panel">
         <div class="panel-title" style="margin-bottom:14px;">Current Allocation</div>
@@ -585,6 +585,8 @@ tbody tr:hover td { background: var(--hover); }
             <div class="corr-reason">The commonly cited –29.6% (Winthrop) measures from the May 1946 post-war peak — a 2.5-year window. The NBER recession itself ran Nov 1948–Oct 1949 and saw ~–14% within that window.</div>
           </div>
         </div>
+        <h3 style="margin-top:18px;">Documented Departures from the Proxy Rules</h3>
+        <ul id="proxyExceptions"></ul>
         <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">
           Remaining 12 recessions are within 1–2 percentage points of Bloomberg/Winthrop figures. The 1953–54, 1960–61, and 1980 recessions did not trigger formal –20% bear markets; their drawdowns are NBER-window estimates from Shiller's price series.
         </div>
@@ -615,6 +617,7 @@ tbody tr:hover td { background: var(--hover); }
               <tr><td>Pre-1970</td><td>Developed Markets</td><td>U.S. large cap equity — MSCI EAFE begins Jan 1970.</td></tr>
               <tr><td>Pre-1970</td><td>Emerging Markets</td><td>U.S. large cap equity — no investable EM benchmark until MSCI EM (1988).</td></tr>
               <tr><td>Pre-1971</td><td>Gold &amp; Silver</td><td>Near-zero return — gold pegged at $35/oz under Bretton Woods until the Aug 1971 Nixon Shock.</td></tr>
+              <tr><td>1970–1987</td><td>Emerging Markets</td><td>MSCI EAFE-adjusted estimate — MSCI EM does not begin until 1988, so this window is an interpolation, not an index.</td></tr>
               <tr><td>Pre-2009</td><td>Crypto</td><td>$0 — Bitcoin launched Jan 3, 2009; all earlier recessions use zero.</td></tr>
               <tr><td>All eras</td><td>CDs</td><td>3-month T-bill rate — FDIC coverage assumed, so no principal loss is modeled.</td></tr>
             </tbody>
@@ -626,9 +629,11 @@ tbody tr:hover td { background: var(--hover); }
           <h3>Structural Limitations</h3>
           <ul style="columns:2;column-gap:32px;column-rule:1px solid var(--border);">
             <li><strong>Recovery curves are modeled:</strong> The drawdown phase uses a cubic Hermite (S-curve) and recovery uses a square-root curve. Actual paths were irregular and non-monotonic — this is an approximation.</li>
-            <li><strong>Dividends (user-selectable):</strong> Toggle total return including dividends via the <em>Income</em> control. Yields are era-specific: Large Cap ranged from ~5.5% in 1937–38 to ~1.5% in 2001–02; Bonds from ~2% (WWII era) to ~13% at the 1981–82 Volcker peak; REIT 9–10% in the 1980s to ~4.5% in 2020; CDs accrue each era's average 3-month T-bill rate (near zero in the 1930s–40s, ~12% at the Volcker peak), so CD interest appears only in +Dividends mode while principal stays flat. Modeled as received-not-reinvested for simplicity.</li>
+            <li><strong>Dividends (user-selectable):</strong> Toggle total return including dividends via the <em>Income</em> control. Yields are era-specific: Large Cap ranged from ~5.5% in 1937–38 to ~1.5% in 2001–02; Bonds from ~2% (WWII era) to ~13% at the 1981–82 Volcker peak; REIT 9–10% in the 1980s to ~4.5% in 2020; CDs accrue each era's average 3-month T-bill rate (near zero in the 1930s–40s, ~12% at the Volcker peak), so CD interest appears only in +Dividends mode while principal stays flat. Each month's income is the era yield applied to that asset's <em>current</em> balance and held as cash, not reinvested — so a position that has fallen 80% pays income on the reduced balance, not on its pre-crash value. Because the yield itself is held constant, income is understated in severe crashes (real yields rose as prices collapsed) and the figure should be read as a conservative floor.</li>
             <li><strong>No rebalancing assumed:</strong> Allocation percentages are held fixed throughout each simulation. Systematic rebalancing during a drawdown typically improves long-term results.</li>
             <li><strong>Nominal vs. real (user-selectable):</strong> Toggle inflation-adjusted values via the <em>Returns</em> control. Real mode deflates each path point by the recession's average CPI. Notable: 1980 (~13.5% CPI), 1973–75 (~9.2%), 1981–82 (~9.4%) — real losses were substantially worse than nominal. The Great Depression used –6.0% (deflation), meaning nominal losses slightly overstated real purchasing-power losses. Deflation is applied only through the downturn phase — the 1929–33 price decline did not persist through the multi-decade recovery, so it is not extrapolated past the trough.</li>
+            <li><strong>Post-recovery growth assumption:</strong> Real mode keeps running after the nominal recovery window closes, because purchasing power can stay below baseline long after the nominal price level is restored. That extension assumes <strong>7% nominal growth per year</strong> and long-run inflation normalising to <strong>3%</strong>. Both are assumptions, not data, and they set how long Real mode reports a recovery taking — the 1973–75 real recovery is roughly five times the nominal figure largely because of them.</li>
+            <li><strong>Assets that did not exist yet:</strong> An asset with no market in a given era (crypto before Jan 2009) is held flat at its notional value for that simulation rather than being dropped. It contributes no return, no yield and no inflation exposure, so it neither helps nor hurts — but it does dilute the rest of the portfolio, exactly as an equivalent cash holding would.</li>
             <li><strong>Correlation simplification:</strong> Portfolio drawdown is the allocation-weighted average of individual asset class returns. Cross-asset contagion (e.g., 2008, when all risk asset correlations spiked to near-1) is not modeled.</li>
             <li><strong>One trough per recession:</strong> Each recession uses a single peak-to-trough figure. Multi-leg bear markets (e.g., the Dot-com bust had two distinct legs in 2001 and 2002) are collapsed to their aggregate drawdown.</li>
           </ul>
@@ -686,11 +691,12 @@ const RECESSIONS = [
   { id:'r1937', name:'1937–38 Recession', period:'1937–1938', color:'#f97316',
     dur:13, rec:60, spx:-54.5, q:'verified', inf:3.5,
     note:'Bloomberg verified: –54.5% peak Mar 1937 to trough Mar 1938. Caused by premature Fed tightening after only a partial Depression recovery — a cautionary tale about withdrawing stimulus too soon.',
-    d:{ largeCap:-54,midCap:-58,smallCap:-60,emerging:-54,developed:-54,bonds:3,cds:0,reit:-50,crypto:0,goldSilver:0,cash:2 },
+    d:{ largeCap:-54.5,midCap:-58,smallCap:-60,emerging:-54.5,developed:-54.5,bonds:3,cds:0,reit:-50,crypto:0,goldSilver:0,cash:2 },
     dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:2.5,cds:0.3,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1945', name:'1945 Recession', period:'1945', color:'#22c55e',
     dur:8, rec:18, spx:38, q:'verified', inf:2.3,
+    proxyException:'Departs from the pre-1970 "international = US large cap" rule: the +38% US rally priced in the end of the war in the Pacific, which European and Asian markets — still occupied or rebuilding — did not share.',
     note:'The only recession in history where equities rose. The S&P gained +38% during Feb–Oct 1945 as markets priced in the end of WWII. Post-war normalization and demand shifts caused the actual NBER-defined recession, but investors were already looking forward.',
     d:{ largeCap:38,midCap:34,smallCap:30,emerging:20,developed:25,bonds:-2,cds:0,reit:22,crypto:0,goldSilver:0,cash:0 },
     dy:{ largeCap:4.5,midCap:4.0,smallCap:4.0,emerging:3.5,developed:3.5,bonds:2.0,cds:0.4,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
@@ -710,7 +716,7 @@ const RECESSIONS = [
   { id:'r1957', name:'1957–58 Recession', period:'1957–1958', color:'#14b8a6',
     dur:3, rec:9, spx:-20.7, q:'verified', inf:2.9,
     note:'Bloomberg verified: –20.7% peak Jul 1957 to trough Oct 1957. Eisenhower-era Fed tightening to fight inflation, combined with a drop in auto sales and a brief Sputnik-era economic shock.',
-    d:{ largeCap:-21,midCap:-23,smallCap:-26,emerging:-21,developed:-21,bonds:4,cds:0,reit:-18,crypto:0,goldSilver:0,cash:1 },
+    d:{ largeCap:-20.7,midCap:-23,smallCap:-26,emerging:-20.7,developed:-20.7,bonds:4,cds:0,reit:-18,crypto:0,goldSilver:0,cash:1 },
     dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:3.5,cds:3.3,reit:5.5,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1960', name:'1960–61 Recession', period:'1960–1961', color:'#06b6d4',
@@ -721,14 +727,15 @@ const RECESSIONS = [
 
   { id:'r1969', name:'1969–70 Recession', period:'1969–1970', color:'#3b82f6',
     dur:18, rec:9, spx:-35.4, q:'verified', inf:5.6,
+    proxyException:'Departs from the pre-1971 "gold pegged at $35" rule: the London Gold Pool collapsed in March 1968, creating a two-tier market in which the free-market price could move above the official peg.',
     note:'Bloomberg verified: –35.4% peak Nov 1968 to trough May 1970. Rising inflation eroded fixed income returns. The Bretton Woods system was under stress, and Nixon would eventually end dollar-gold convertibility in 1971.',
-    d:{ largeCap:-35,midCap:-40,smallCap:-45,emerging:-35,developed:-35,bonds:-3,cds:0,reit:-30,crypto:0,goldSilver:5,cash:0 },
+    d:{ largeCap:-35.4,midCap:-40,smallCap:-45,emerging:-35.4,developed:-35.4,bonds:-3,cds:0,reit:-30,crypto:0,goldSilver:5,cash:0 },
     dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:6.5,cds:6.5,reit:6.5,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1973', name:'Oil Crisis / Stagflation', period:'1973–1975', color:'#6366f1',
     dur:21, rec:21, spx:-48.2, q:'verified', inf:9.2,
     note:'Bloomberg verified: –48.2% peak Jan 1973 to trough Oct 1974. The OPEC oil embargo triggered stagflation — simultaneous high inflation and recession. Gold surged ~70% after Nixon ended dollar-gold convertibility. Bonds and cash were both hurt by inflation.',
-    d:{ largeCap:-48,midCap:-52,smallCap:-55,emerging:-45,developed:-45,bonds:-5,cds:0,reit:-42,crypto:0,goldSilver:70,cash:0 },
+    d:{ largeCap:-48.2,midCap:-52,smallCap:-55,emerging:-45,developed:-45,bonds:-5,cds:0,reit:-42,crypto:0,goldSilver:70,cash:0 },
     dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:7.5,cds:7.5,reit:8.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1980', name:'1980 Recession', period:'1980', color:'#8b5cf6',
@@ -740,7 +747,7 @@ const RECESSIONS = [
   { id:'r1981', name:'1981–82 Recession', period:'1981–1982', color:'#a855f7',
     dur:21, rec:15, spx:-27.1, q:'verified', inf:9.4,
     note:'Bloomberg verified: –27.1% peak Nov 1980 to trough Aug 1982. The Volcker Shock — sustained high interest rates to break the inflation cycle — caused a severe recession. Bonds rallied strongly as inflation expectations fell and rates began dropping.',
-    d:{ largeCap:-27,midCap:-30,smallCap:-30,emerging:-27,developed:-27,bonds:10,cds:0,reit:-22,crypto:0,goldSilver:-30,cash:0 },
+    d:{ largeCap:-27.1,midCap:-30,smallCap:-30,emerging:-27.1,developed:-27.1,bonds:10,cds:0,reit:-22,crypto:0,goldSilver:-30,cash:0 },
     dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:13.0,cds:12.5,reit:10.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r1990', name:'Gulf War Recession', period:'1990–1991', color:'#ec4899',
@@ -752,19 +759,19 @@ const RECESSIONS = [
   { id:'r2001', name:'Dot-com Bust', period:'2001–2002', color:'#f43f5e',
     dur:31, rec:56, spx:-49.1, q:'verified', inf:2.8,
     note:'Bloomberg verified: –49.1% peak Mar 2000 to trough Oct 2002. The NASDAQ fell nearly 80%. REITs (+15%) and bonds (+12%) were standout safe havens as investors fled growth stocks. Gold began a multi-year bull run. Compounded by 9/11 and corporate accounting scandals.',
-    d:{ largeCap:-49,midCap:-42,smallCap:-35,emerging:-30,developed:-45,bonds:12,cds:0,reit:15,crypto:0,goldSilver:10,cash:2 },
+    d:{ largeCap:-49.1,midCap:-42,smallCap:-35,emerging:-30,developed:-45,bonds:12,cds:0,reit:15,crypto:0,goldSilver:10,cash:2 },
     dy:{ largeCap:1.5,midCap:1.2,smallCap:1.2,emerging:2.0,developed:2.0,bonds:5.5,cds:3.5,reit:7.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r2008', name:'Great Recession', period:'2007–2009', color:'#fb923c',
     dur:17, rec:48, spx:-56.8, q:'verified', inf:2.5,
     note:'Bloomberg verified: –56.8% peak Oct 2007 to trough Mar 2009. The housing and credit crisis spread globally. REITs collapsed –68%. Emerging markets fell even harder than the US. Gold (+25%) and US Treasuries provided the only meaningful cushion.',
-    d:{ largeCap:-57,midCap:-60,smallCap:-60,emerging:-65,developed:-58,bonds:5,cds:0,reit:-68,crypto:0,goldSilver:25,cash:2 },
+    d:{ largeCap:-56.8,midCap:-60,smallCap:-60,emerging:-65,developed:-58,bonds:5,cds:0,reit:-68,crypto:0,goldSilver:25,cash:2 },
     dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:4.5,cds:2.0,reit:5.0,crypto:0,goldSilver:0,cash:0 } },
 
   { id:'r2020', name:'COVID-19 Crash', period:'2020', color:'#64748b',
     dur:1, rec:5, spx:-33.9, q:'verified', inf:1.2,
     note:'Bloomberg verified: –33.9% peak Feb 2020 to trough Mar 2020 — the fastest bear market on record at just 33 days. Also the fastest recovery in history. Crypto fell –50% initially, then surged to new highs. Massive fiscal and monetary stimulus drove the rapid rebound.',
-    d:{ largeCap:-34,midCap:-40,smallCap:-42,emerging:-32,developed:-34,bonds:8,cds:0,reit:-42,crypto:-50,goldSilver:12,cash:1 },
+    d:{ largeCap:-33.9,midCap:-40,smallCap:-42,emerging:-32,developed:-33.9,bonds:8,cds:0,reit:-42,crypto:-50,goldSilver:12,cash:1 },
     dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:2.0,cds:0.5,reit:4.5,crypto:0,goldSilver:0,cash:0 } },
 ];
 
@@ -838,86 +845,130 @@ function setPreset(name) {
   });
 }
 function refreshAll() {
-  renderMainChart(); updateDonut();
+  renderMainChart(); renderDonut();
   const f=RECESSIONS.find(r=>selected.has(r.id));
   if(f) renderAssetChart(f);
 }
 
-// ─── Calculations ─────────────────────────────────────
-function dd(r) { pct(); return Object.entries(ALLOC).reduce((s,[k,a])=>s+a.pct*(r.d[k]??0),0); }
-function contribs(r) {
-  return Object.entries(ALLOC).map(([k,a])=>({
-    label:a.label,color:a.color,
-    dollarImpact:assetImpact(r,k,a),
-  })).sort((a,b)=>a.dollarImpact-b.dollarImpact);
-}
-// Per-asset dollar change at the trough month on the current Real/Dividend basis,
-// so per-asset figures always sum to makePath(r,'absolute',realMode,divMode)[r.dur]-tot().
-function assetImpact(r,k,a) {
-  // Crypto didn't exist pre-2009 (d=dy=0 by convention) — real-mode deflation
-  // would otherwise turn that "didn't exist" zero into a phantom gain/loss.
-  if(k==='crypto' && (r.d.crypto??0)===0 && (r.dy.crypto??0)===0) return 0;
-  let v=a.value*(1+(r.d[k]??0)/100);
-  if(divMode) v+=a.value*((r.dy[k]||0)/100)*(r.dur/12);
-  if(realMode) v/=Math.pow(1+r.inf/100,r.dur/12);
-  return v-a.value;
-}
-// Extreme of the current-mode path within the downturn window, by larger deviation
-// from start. Dividends/deflation can shift the true extreme off month r.dur,
-// so scan the window rather than index it.
-function pathExtreme(r) {
-  const t=tot(), win=makePath(r,'absolute',realMode,divMode).slice(0,r.dur+1);
-  const mn=Math.min(...win), mx=Math.max(...win);
-  return t-mn>=mx-t ? mn : mx;
-}
-function fmtRec(rec) {
-  const y=rec/12;
-  return rec>=240 ? (Number.isInteger(y)?y:y.toFixed(1))+' yrs' : rec+' mo';
+// ─── Simulation engine ────────────────────────────────
+// Single source of truth. The chart line, the headline drawdown, the per-asset bars
+// and the recovery figure all derive from these per-asset paths, so they cannot
+// disagree with each other the way a portfolio-level blend allowed them to.
+const LONG_RUN_INFLATION = 3;   // long-run CPI assumed once a recession's own inflation episode ends
+const POST_RECOVERY_GROWTH = 7; // nominal % p.a. assumed after the recovery window closes
+
+// An asset that did not exist in this era (crypto pre-2009, flagged d=dy=0 by
+// convention) has no return AND no purchasing-power exposure. Deflating its notional
+// balance in Real mode invents a gain or loss it could never have had.
+function existed(r, k) {
+  return !(k === 'crypto' && (r.d.crypto ?? 0) === 0 && (r.dy.crypto ?? 0) === 0);
 }
 
-const LONG_RUN_INFLATION = 3; // long-run CPI average assumed once a recession's own high/low inflation episode ends
+// Deflation (negative inf) only ran during the downturn itself (e.g. 1929–33);
+// compounding it across a multi-decade recovery would inflate real values absurdly.
+// Positive inflation: apply r.inf through nomEnd, then normalise to LONG_RUN_INFLATION.
+function deflator(r, m, nomEnd) {
+  if (r.inf < 0) return Math.pow(1 + r.inf/100, Math.min(m, r.dur)/12);
+  if (m <= nomEnd) return Math.pow(1 + r.inf/100, m/12);
+  return Math.pow(1 + r.inf/100, nomEnd/12)
+       * Math.pow(1 + LONG_RUN_INFLATION/100, (m - nomEnd)/12);
+}
 
-function makePath(r, mode, real, divs) {
-  const t=tot(), d=dd(r), trough=t*(1+d/100), pts=[];
-  const nomEnd=r.dur+r.rec;
-  // In real mode, extend when 7% nominal growth exceeds the long-run inflation assumption.
-  // During the recession itself, apply the actual r.inf; after recovery, assume normalization.
-  const canRecover=real && LONG_RUN_INFLATION < 7;
-  const limit=canRecover ? nomEnd+180 : nomEnd;
-  for(let m=0;m<=limit;m++){
-    let raw;
-    if(m<=r.dur){
-      const e=r.dur===0?1:m/r.dur, s=e*e*(3-2*e);
-      raw=t+(trough-t)*s;
-    } else if(m<=nomEnd) {
-      raw=trough+(t-trough)*Math.sqrt((m-r.dur)/r.rec);
-    } else {
-      raw=t*Math.pow(1.07,(m-nomEnd)/12);
-    }
-    let val=raw;
-    if(divs) val+=Object.entries(ALLOC).reduce((sum,[k,a])=>sum+a.value*((r.dy[k]||0)/100)*(m/12),0);
-    // Deflation (negative inf) only ran during the downturn itself (e.g. 1929–33);
-    // compounding it across a multi-decade recovery would inflate real values absurdly.
-    // For positive inflation: apply r.inf through nomEnd, then normalize to LONG_RUN_INFLATION after.
-    if(real){
-      if(r.inf<0){
-        val/=Math.pow(1+r.inf/100,Math.min(m,r.dur)/12);
-      } else if(m<=nomEnd){
-        val/=Math.pow(1+r.inf/100,m/12);
+// Walks one recession month by month carrying a balance per asset class.
+// Summed, the per-asset price curves reproduce the old portfolio-level curve exactly.
+function simulate(r, o) {
+  const alloc = o.alloc || ALLOC, real = !!o.real, divs = !!o.divs;
+  const keys = Object.keys(alloc);
+  const start = keys.reduce((s,k) => s + alloc[k].value, 0);
+  const nomEnd = r.dur + r.rec;
+  // Real mode runs past the nominal window: purchasing power can stay below baseline
+  // long after the nominal price level has recovered.
+  const limit = real ? nomEnd + 180 : nomEnd;
+  const divCash = {}, byAsset = {};
+  keys.forEach(k => { divCash[k] = 0; byAsset[k] = []; });
+  const total = [];
+  for (let m = 0; m <= limit; m++) {
+    const defl = real ? deflator(r, m, nomEnd) : 1;
+    let sum = 0;
+    for (const k of keys) {
+      const v0 = alloc[k].value;
+      // An asset that did not exist in this era contributes its notional balance
+      // unchanged for the whole run: no return, no yield, no inflation exposure.
+      if (!existed(r, k)) { byAsset[k].push(v0); sum += v0; continue; }
+      const trough = v0 * (1 + (r.d[k] ?? 0)/100);
+      let price;
+      if (m <= r.dur) {
+        const e = r.dur === 0 ? 1 : m/r.dur;
+        price = v0 + (trough - v0) * (e*e*(3 - 2*e));                 // smoothstep decline
+      } else if (m <= nomEnd) {
+        price = trough + (v0 - trough) * Math.sqrt((m - r.dur)/r.rec); // sqrt recovery
       } else {
-        val/=Math.pow(1+r.inf/100,nomEnd/12)*Math.pow(1+LONG_RUN_INFLATION/100,(m-nomEnd)/12);
+        price = v0 * Math.pow(1 + POST_RECOVERY_GROWTH/100, (m - nomEnd)/12);
       }
+      // Dividends accrue monthly on the CURRENT balance and are held as cash, not
+      // reinvested. Paying a fixed yield on the pre-crash balance (as this once did)
+      // credited a portfolio down 86% with 112% of its starting value in income.
+      if (divs && m > 0) divCash[k] += price * ((r.dy[k] || 0)/100) / 12;
+      const v = (price + (divs ? divCash[k] : 0)) / defl;
+      byAsset[k].push(v);
+      sum += v;
     }
-    pts.push(mode==='indexed'?(t>0?((val/t)-1)*100:0):val);
-    if(canRecover && m>nomEnd){
-      const v=pts[pts.length-1];
-      if(mode==='indexed' ? v>=0 : v>=t){
-        pts[pts.length-1] = mode==='indexed' ? 0 : t;
-        break;
-      }
-    }
+    total.push(sum);
+    if (real && m > nomEnd && sum >= start) break; // real purchasing power restored
   }
-  return pts;
+  return { total, byAsset, start, nomEnd };
+}
+
+// One simulation per recession per render pass — chart, metrics and table share it.
+let simCache = new Map(), simCacheKey = '';
+function sim(r) {
+  const key = Object.entries(ALLOC).map(([k,a]) => k+':'+a.value).join(',')
+            + '|' + realMode + '|' + divMode;
+  if (key !== simCacheKey) { simCache = new Map(); simCacheKey = key; }
+  if (!simCache.has(r.id)) simCache.set(r.id, simulate(r, {real:realMode, divs:divMode}));
+  return simCache.get(r.id);
+}
+
+// ─── Derived figures ──────────────────────────────────
+// Month of the largest deviation from the starting value within the downturn window.
+// Dividends and deflation shift the true extreme off month r.dur, so scan for it.
+function extremeIndex(r) {
+  const s = sim(r), win = s.total.slice(0, r.dur + 1);
+  const mn = Math.min(...win), mx = Math.max(...win);
+  return win.indexOf((s.start - mn) >= (mx - s.start) ? mn : mx);
+}
+function pathExtreme(r) { return sim(r).total[extremeIndex(r)]; }
+
+// Per-asset dollar change at that same month on the same basis. Both come from one
+// simulation, so these always sum to pathExtreme(r) - tot().
+function assetImpact(r, k) { return sim(r).byAsset[k][extremeIndex(r)] - ALLOC[k].value; }
+
+function contribs(r) {
+  return Object.keys(ALLOC).map(k => ({
+    label: ALLOC[k].label, color: ALLOC[k].color, dollarImpact: assetImpact(r, k),
+  })).sort((a,b) => a.dollarImpact - b.dollarImpact);
+}
+
+// Months from the extreme back to the starting value on the current basis, so the
+// printed figure matches where the drawn line actually returns to baseline.
+// null when it never recovers inside the modelled window.
+function recoveryMonths(r) {
+  const s = sim(r), from = extremeIndex(r);
+  for (let m = from; m < s.total.length; m++) if (s.total[m] >= s.start) return m - from;
+  return null;
+}
+
+function makePath(r, mode) {
+  const s = sim(r);
+  return mode === 'indexed'
+    ? s.total.map(v => s.start > 0 ? ((v/s.start) - 1)*100 : 0)
+    : s.total;
+}
+
+function fmtRec(rec) {
+  if (rec === null || rec === undefined) return 'not recovered';
+  const y = rec/12;
+  return rec >= 240 ? (Number.isInteger(y) ? y : y.toFixed(1)) + ' yrs' : rec + ' mo';
 }
 
 // ─── Sidebar ──────────────────────────────────────────
@@ -948,8 +999,8 @@ function renderDetailPanel(r) {
     <div class="panel-title" style="color:${r.color};margin-bottom:10px;">${r.name}</div>
     <p>${r.note}</p>
     <div class="detail-pills">
-      <span class="detail-pill">Downturn: <strong>${r.dur} mo</strong></span>
-      <span class="detail-pill">${r.spx>0?'Normalize':'Recovery'}: <strong>${fmtRec(r.rec)}</strong></span>
+      <span class="detail-pill">Downturn: <strong>${extremeIndex(r)} mo</strong></span>
+      <span class="detail-pill">${r.spx>0?'Normalize':'Recovery'}: <strong>${fmtRec(recoveryMonths(r))}</strong></span>
       <span class="detail-pill">S&amp;P 500: <strong style="color:${r.spx>0?'var(--green)':'var(--red)'}">${r.spx>0?'+':''}${r.spx}%</strong></span>
     </div>
   </div>`;
@@ -971,11 +1022,11 @@ function renderMainChart() {
   const recs=RECESSIONS.filter(r=>selected.has(r.id));
   let maxM=0;
   const datasets=recs.map(r=>{
-    const path=makePath(r,chartMode,realMode,divMode);
+    const path=makePath(r,chartMode);
     const m=path.length-1; if(m>maxM) maxM=m;
     return { label:r.name, data:path.map((v,i)=>({x:i,y:v})),
       borderColor:r.color, backgroundColor:r.color+'15',
-      borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:0.4, fill:chartMode==='indexed' };
+      borderWidth:2, pointRadius:0, pointHoverRadius:4, tension:0, fill:chartMode==='indexed' };
   });
   if(chartMode==='indexed') datasets.push({
     label:'Baseline', data:Array.from({length:maxM+1},(_,i)=>({x:i,y:0})),
@@ -1024,7 +1075,7 @@ function renderMainChart() {
 }
 
 // ─── Metrics ──────────────────────────────────────────
-const qLabel={verified:'✓ Verified — Winthrop/Bloomberg data',proxy:'~ Proxy estimate',good:'✓ Good data'};
+const qLabel={verified:'✓ Verified — Winthrop/Bloomberg data',proxy:'~ Proxy estimate'};
 function renderMetrics(recs) {
   const t=tot();
   const grid=document.getElementById('metricsGrid');
@@ -1038,7 +1089,7 @@ function renderMetrics(recs) {
     // Assets that didn't move (or didn't exist yet — pre-2009 crypto) are excluded.
     const active=Object.entries(r.d)
       .filter(([k])=>ALLOC[k]&&ALLOC[k].value>0)
-      .map(([k])=>({label:ALLOC[k].label, dollar:assetImpact(r,k,ALLOC[k])}))
+      .map(([k])=>({label:ALLOC[k].label, dollar:assetImpact(r,k)}))
       .filter(a=>Math.round(a.dollar)!==0)
       .sort((a,b)=>b.dollar-a.dollar);
     const best=active[0], worst=active[active.length-1];
@@ -1053,9 +1104,9 @@ function renderMetrics(recs) {
         <div class="mrow"><span class="mrow-label">Portfolio ${isPos?'high':'low'}</span>
           <span class="mrow-value">$${Math.round(t+impact).toLocaleString()}</span></div>
         <div class="mrow"><span class="mrow-label">Months to ${isPos?'peak':'trough'}</span>
-          <span class="mrow-value">${r.dur} mo</span></div>
+          <span class="mrow-value">${extremeIndex(r)} mo</span></div>
         <div class="mrow"><span class="mrow-label">Recovery / normalize</span>
-          <span class="mrow-value">${fmtRec(r.rec)}</span></div>
+          <span class="mrow-value">${fmtRec(recoveryMonths(r))}</span></div>
         <div class="mrow"><span class="mrow-label">S&amp;P 500</span>
           <span class="mrow-value ${r.spx>0?'grn':'red'}">${r.spx>0?'+':''}${r.spx}%</span></div>
       </div>
@@ -1073,8 +1124,11 @@ function renderMetrics(recs) {
 }
 
 // ─── Asset chart ──────────────────────────────────────
-function renderAssetChart(r) {
+function renderAssetChart(r, preview) {
   const c=contribs(r), C=chartInk();
+  document.getElementById('assetNote').textContent = preview
+    ? 'Previewing ' + r.name + ' — hovering the sidebar'
+    : r.name + ' · hover a recession in the sidebar to preview another';
   if(assetCh) assetCh.destroy();
   assetCh=new Chart(document.getElementById('assetChart'),{type:'bar',
     data:{labels:c.map(x=>x.label),datasets:[{label:'Dollar Impact',
@@ -1110,9 +1164,6 @@ function renderDonut() {
           titleColor:C.ink,bodyColor:C.muted,
           callbacks:{label:i=>{const e=entries[i.dataIndex];return ` $${e.value.toLocaleString()} (${(e.pct*100).toFixed(1)}%)`;}}}}}});
 }
-function updateDonut() {
-  renderDonut();
-}
 
 // ─── Table ────────────────────────────────────────────
 function renderTable(recs) {
@@ -1123,11 +1174,11 @@ function renderTable(recs) {
   document.getElementById('tableBody').innerHTML=recs.map(r=>{
     const troughVal=pathExtreme(r);
     const d=t>0?((troughVal/t)-1)*100:0,impact=troughVal-t,isPos=d>=0;
-    const rec=fmtRec(r.rec);
+    const rec=fmtRec(recoveryMonths(r));
     return `<tr>
       <td><div class="cell-rec"><div class="cell-dot" style="background:${r.color}"></div>${r.name}</div></td>
       <td class="cell-muted">${r.period}</td>
-      <td>${r.dur} mo</td>
+      <td>${extremeIndex(r)} mo</td>
       <td class="${isPos?'cell-pos':'cell-neg'}">${isPos?'+':''}${d.toFixed(1)}%</td>
       <td class="${isPos?'cell-pos':'cell-neg'}">${isPos?'+':'–'}$${Math.abs(Math.round(impact)).toLocaleString()}</td>
       <td>${rec}</td>
@@ -1136,12 +1187,25 @@ function renderTable(recs) {
   }).join('');
 }
 
+// Any recession whose data departs from a documented proxy rule must carry a written
+// reason (verify.js enforces this); render them so the page states them out loud.
+function renderProxyExceptions(){
+  const rows = RECESSIONS.filter(r=>r.proxyException);
+  document.getElementById('proxyExceptions').innerHTML = rows.map(r=>
+    `<li><strong>${r.name}:</strong> ${r.proxyException}</li>`).join('');
+}
+
 // ─── Interactions ─────────────────────────────────────
 function tog(id){ selected.has(id)?selected.delete(id):selected.add(id); renderSidebar(); renderMainChart(); }
+// Hovering previews any recession's asset breakdown; leaving restores whatever the
+// selection owns. Previously this bailed out whenever anything was selected, which —
+// since the page auto-selects two recessions — meant it never ran at all.
 function hov(id){
-  if(selected.size>0) return; // a selection owns the asset chart; previews only when nothing is selected
-  if(id){ const r=RECESSIONS.find(r=>r.id===id); if(r)renderAssetChart(r); }
-  else if(assetCh){ assetCh.destroy(); assetCh=null; }
+  const r = id ? RECESSIONS.find(x=>x.id===id) : null;
+  if(r){ renderAssetChart(r, true); return; }
+  const owner = RECESSIONS.find(x=>selected.has(x.id));
+  if(owner) renderAssetChart(owner);
+  else if(assetCh){ assetCh.destroy(); assetCh=null; document.getElementById('assetNote').textContent=''; }
 }
 function selectAll(){ RECESSIONS.forEach(r=>selected.add(r.id)); renderSidebar(); renderMainChart(); }
 function clearAll(){ selected.clear(); renderSidebar(); renderMainChart(); }
@@ -1149,6 +1213,7 @@ function setMode(m){
   chartMode=m;
   document.getElementById('btn-absolute').classList.toggle('active',m==='absolute');
   document.getElementById('btn-indexed').classList.toggle('active',m==='indexed');
+  syncLogAvailability();
   renderMainChart();
 }
 function setRealMode(on){
@@ -1169,9 +1234,20 @@ function setLogScale(on){
   document.getElementById('btn-log').classList.toggle('active',on);
   renderMainChart();
 }
+// A log axis is undefined over the negative values % Change produces, so the scale
+// silently stays linear there. Disable the control rather than let it look applied.
+function syncLogAvailability(){
+  const off = chartMode==='indexed';
+  const btn = document.getElementById('btn-log');
+  btn.disabled = off;
+  btn.title = off
+    ? 'Log scale is unavailable in % Change mode — the axis crosses zero and negative values have no logarithm'
+    : 'Logarithmic Y-axis — use when outliers (like the Great Depression) compress other lines into a flat band';
+  if(off && logScale) setLogScale(false);
+}
 
 // ─── Init ─────────────────────────────────────────────
-syncThemeBtn();
+syncThemeBtn(); syncLogAvailability(); renderProxyExceptions();
 pct(); renderEditor(); renderSidebar(); renderDonut();
 tog('r2008'); tog('r2020');
 </script>
