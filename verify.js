@@ -31,9 +31,10 @@ function stubEl() {
   };
   return el;
 }
+const els = {};
 const document = {
   documentElement: { dataset: { theme: 'dark' }, style: {} },
-  getElementById(){ return stubEl(); },
+  getElementById(id){ return els[id] || (els[id] = stubEl()); },
   querySelectorAll(){ return []; },
   querySelector(){ return stubEl(); },
   createElement(){ return stubEl(); },
@@ -58,6 +59,7 @@ const EXPOSE = `;({ simulate, sim, makePath, assetImpact, contribs, extremeIndex
   pathExtreme, tot, pct, existed, deflator, fmtRec, cp,
   ALLOC, BASE, PRESETS, RECESSIONS, LONG_RUN_INFLATION, POST_RECOVERY_GROWTH,
   stateToHash, applyHash, benchPath, benchDrawdown, simulate,
+  ASSET_GROUPS, PRESET_META, renderPresetDefs, presetSummary,
   state: () => ({ chartMode, realMode, divMode, logScale, withdrawAmt,
                   withdrawInflate, rebalanceOn, benchOn,
                   selected: Array.from(selected).sort().join(','),
@@ -101,29 +103,41 @@ for (const [n, m] of Object.entries(A.PRESETS)) {
   ok('preset/' + n + ' sums to 100%', Math.abs(s - 1) < 1e-9, 'got ' + (s*100).toFixed(2) + '%');
 }
 
-// ── 3. Preset cards in the HTML match the PRESETS object ─────────────────────
-// 40 percentages used to be hand-copied; this is what stops them silently drifting.
+// ── 3. The preset documentation panel is generated from PRESETS ──────────────
+// It used to repeat 40 percentages by hand. Rendering it removes the drift risk;
+// what remains testable is that the grouping covers the asset list.
 {
-  const NAME2KEY = { Conservative:'conservative', Balanced:'balanced',
-                     Aggressive:'aggressive', 'All Equity':'allEquity' };
-  const LBL2KEY = { 'Large Cap (US)':'largeCap','Mid Cap':'midCap','Small Cap':'smallCap',
-    'Emerging Markets':'emerging','Developed Markets':'developed','Bonds':'bonds','CDs':'cds',
-    'REIT':'reit','Gold &amp; Silver':'goldSilver','Crypto':'crypto','Cash &amp; Savings':'cash' };
-  const cards = src.split('<div class="preset-def-card">').slice(1);
-  ok('preset cards present', cards.length === Object.keys(A.PRESETS).length,
-     'found ' + cards.length + ' cards for ' + Object.keys(A.PRESETS).length + ' presets');
-  for (const card of cards) {
-    const nm = (card.match(/class="preset-def-name">([^<]+)</) || [])[1];
-    const key = NAME2KEY[nm];
-    if (!key) continue;
-    const html = {};
-    const re = /preset-def-dot"[^>]*><\/span>([^<]+)<\/span><span class="preset-def-pct[^"]*">([\d.]+)%/g;
-    let m; while ((m = re.exec(card))) html[LBL2KEY[m[1].trim()]] = parseFloat(m[2]) / 100;
-    const drift = Object.keys(A.PRESETS[key])
-      .filter(k => Math.abs((html[k] ?? 0) - A.PRESETS[key][k]) > 1e-9)
-      .map(k => k + ' card ' + ((html[k] ?? 0)*100) + '% vs code ' + (A.PRESETS[key][k]*100) + '%');
-    ok('preset card/' + nm + ' matches code', drift.length === 0, drift.join('; '));
-  }
+  const grouped = A.ASSET_GROUPS.reduce((acc,g) => acc.concat(g.keys), []);
+  const missing = KEYS.filter(k => grouped.indexOf(k) < 0);
+  const extra = grouped.filter(k => KEYS.indexOf(k) < 0);
+  const dupes = grouped.filter((k,i) => grouped.indexOf(k) !== i);
+  ok('presets/every asset appears in a group', missing.length === 0, 'ungrouped: ' + missing);
+  ok('presets/no group names an unknown asset', extra.length === 0, 'unknown: ' + extra);
+  ok('presets/no asset is grouped twice', dupes.length === 0, 'duplicated: ' + dupes);
+  ok('presets/every preset has a description',
+     Object.keys(A.PRESETS).every(k => A.PRESET_META[k] && A.PRESET_META[k].tag.length > 20));
+
+  // The rendered panel must report the same weights the buttons apply.
+  A.renderPresetDefs();
+  const out = els.presetDefs.innerHTML;
+  const cards = out.split('<div class="preset-def-card">').slice(1);
+  ok('presets/renders one card per preset', cards.length === Object.keys(A.PRESETS).length,
+     'rendered ' + cards.length);
+  Object.keys(A.PRESETS).forEach((key, i) => {
+    const mix = A.PRESETS[key], card = cards[i] || '';
+    const shown = {};
+    const re = /style="background:[^"]*"><\/span>([^<]+)<\/span>\s*<span class="preset-def-pct">([\d.]+)%/g;
+    let m; while ((m = re.exec(card))) {
+      const k = KEYS.filter(kk => A.BASE[kk].label === m[1].trim())[0];
+      if (k) shown[k] = parseFloat(m[2]) / 100;
+    }
+    const drift = KEYS.filter(k => Math.abs((shown[k] || 0) - (mix[k] || 0)) > 5e-4)
+      .map(k => k + ' shows ' + ((shown[k]||0)*100) + '% but applies ' + ((mix[k]||0)*100) + '%');
+    ok('presets/' + key + ' panel matches what it applies', drift.length === 0, drift.join('; '));
+    const total = KEYS.reduce((a,k) => a + (shown[k] || 0), 0);
+    ok('presets/' + key + ' panel totals 100%', Math.abs(total - 1) < 5e-4,
+       'panel totals ' + (total*100).toFixed(1) + '%');
+  });
 }
 
 // ── 4. Documented proxy rules actually hold in the data ──────────────────────

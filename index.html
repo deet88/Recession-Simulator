@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Recession Simulator</title>
+<meta name="description" content="Stress-test a custom multi-asset portfolio against every U.S. recession since 1929, using historically verified drawdown data rather than a single headline number.">
+<meta property="og:title" content="Recession Simulator">
+<meta property="og:description" content="Pick an allocation, then see how it would have moved through every U.S. recession since the Great Depression — peak to trough to recovery.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://deet88.github.io/Recession-Simulator/screenshot.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d14'/%3E%3Cpath d='M5 9l7 11 5-5 10 8' fill='none' stroke='%23f04f5a' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <script>
 // Apply saved theme before first paint to avoid a flash of the wrong mode
 (function(){
@@ -12,7 +19,9 @@
   document.documentElement.dataset.theme = t;
 })();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+  integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD"
+  crossorigin="anonymous"></script>
 <style>
 :root {
   --bg: #0b0d14; --surface: #13151f; --card: #1a1d2b; --card2: #1f2233;
@@ -37,7 +46,8 @@ body, header, .sidebar, .panel, .presets-panel, .method-panel {
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-  background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+  background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5;
+  display: flex; flex-direction: column; }
 
 header { background: var(--surface); border-bottom: 1px solid var(--border);
   padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
@@ -52,7 +62,7 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
 .hstat-value { font-size: 20px; font-weight: 800; color: var(--strong); letter-spacing: -.02em; line-height: 1.2; }
 .hstat-value.dyn { color: var(--accent-light); }
 
-.layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 57px); }
+.layout { display: grid; grid-template-columns: 240px 1fr; flex: 1; min-height: 0; }
 
 .sidebar { background: var(--surface); border-right: 1px solid var(--border);
   padding: 16px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
@@ -83,11 +93,16 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
 .rec-list { display: flex; flex-direction: column; gap: 2px; }
 .rec-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px;
   border-radius: 7px; cursor: pointer; transition: background .12s;
-  border: 1px solid transparent; user-select: none; }
+  border: 1px solid transparent; user-select: none;
+  /* No width:100% — the desktop list is a flex column and stretches these anyway,
+     while the mobile list is a horizontal scroll strip where a full-width item
+     would blow the layout out to 15 screens wide. */
+  background: transparent; font: inherit; color: inherit; text-align: left; }
 .rec-item:hover { background: var(--card); }
 .rec-item.active { background: var(--card); border-color: var(--border2); }
-.rec-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.rec-info { flex: 1; min-width: 0; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: block; }
+.rec-info { flex: 1; min-width: 0; display: block; }
+.rec-name, .rec-period { display: block; }
 .rec-name { font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; }
 .rec-period { font-size: 10px; color: var(--muted); }
 .rec-badge { font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 4px; flex-shrink: 0; }
@@ -98,6 +113,15 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
 .sidebar-note { background: rgba(93,106,240,.07); border: 1px solid rgba(93,106,240,.18);
   border-radius: 7px; padding: 10px 11px; font-size: 11px; color: var(--muted); line-height: 1.55; }
 .sidebar-note strong { color: var(--text); }
+/* title= tooltips do not exist on touch, so the same guidance lives here too. */
+.sidebar-help { background: var(--card); border: 1px solid var(--border);
+  border-radius: 7px; font-size: 11px; color: var(--muted); }
+.sidebar-help summary { padding: 8px 11px; cursor: pointer; font-weight: 600;
+  color: var(--text); border-radius: 7px; list-style-position: inside; }
+.sidebar-help[open] summary { border-bottom: 1px solid var(--border); border-radius: 7px 7px 0 0; }
+.sidebar-help dl { padding: 4px 11px 10px; margin: 0; }
+.sidebar-help dt { color: var(--accent-light); font-weight: 600; margin-top: 8px; }
+.sidebar-help dd { margin: 2px 0 0; line-height: 1.5; }
 
 .main { padding: 20px; display: flex; flex-direction: column; gap: 18px; overflow: auto; }
 .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
@@ -129,6 +153,8 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
 
 /* Charts */
 .chart-wrap { position: relative; }
+.chart-main { height: 320px; }
+.chart-sm { height: 290px; }
 .empty-state { display: flex; flex-direction: column; align-items: center;
   justify-content: center; height: 100%; gap: 10px; color: var(--faint); }
 .empty-state svg { width: 40px; height: 40px; opacity: .45; }
@@ -192,6 +218,7 @@ tbody tr:hover td { background: var(--hover); }
 .preset-def-dot  { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .preset-def-pct  { font-weight: 600; color: var(--text); }
 .preset-def-pct.zero { color: var(--faint); }
+.preset-def-zero { font-size: 11px; color: var(--faint); margin-top: 10px; font-style: italic; }
 .preset-def-divider { height: 1px; background: var(--border); margin: 6px 0; }
 .preset-group-label { font-size: 9px; font-weight: 700; color: var(--faint);
   text-transform: uppercase; letter-spacing: .09em; margin: 8px 0 4px; }
@@ -242,6 +269,20 @@ tbody tr:hover td { background: var(--hover); }
   .corrections-grid { grid-template-columns: 1fr; }
   .method-panel { padding: 16px; }
 }
+:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; border-radius: 6px; }
+.alloc-input-wrap:has(.alloc-input:focus-visible) { outline: 2px solid var(--accent-light); outline-offset: 2px; }
+@media print {
+  :root { color-scheme: light; }
+  header { position: static; }
+  .sidebar, .btn, #copyBtn, #themeBtn, .sidebar-help { display: none !important; }
+  .layout { display: block; }
+  .main { padding: 0; }
+  .panel, .presets-panel, .method-panel, .metric-card {
+    break-inside: avoid; border-color: #ccc; }
+  .chart-main { height: 300px; }
+  .chart-sm { height: 260px; }
+  a[href]::after { content: none; }
+}
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
@@ -280,7 +321,8 @@ tbody tr:hover td { background: var(--hover); }
   .sidebar > .sidebar-label,
   .sidebar > .preset-grid,
   .sidebar > .btn-row,
-  .sidebar > .rec-list,
+  .sidebar > .rec-list { grid-column: 1 / -1; }
+  .sidebar > .sidebar-help,
   .sidebar > .sidebar-note { grid-column: 1 / -1; }
   .sidebar > .sidebar-note { display: none; }
   /* Smaller mode buttons to fit two per group cell */
@@ -307,14 +349,16 @@ tbody tr:hover td { background: var(--hover); }
   /* Allocation rows: tighter sizing so labels don't get pushed off screen */
   .alloc-cols { grid-template-columns: 1fr; }
   .alloc-row { padding: 8px 10px; gap: 8px; }
-  .alloc-input { width: 68px; padding: 4px 6px; }
+  /* 68px clipped six- and seven-figure balances; the label can give up the room. */
+  .alloc-input { width: 86px; padding: 4px 6px; }
   .alloc-prefix { padding: 4px 4px 4px 7px; }
-  .alloc-pct { min-width: 36px; padding: 2px 4px; font-size: 10px; }
+  .alloc-pct { min-width: 34px; padding: 2px 4px; font-size: 10px; }
+  .alloc-label { font-size: 11px; }
 
   /* Charts */
   .chart-grid-2 { grid-template-columns: 1fr; }
-  .chart-wrap[style*="height:320px"] { height: 240px !important; }
-  .chart-wrap[style*="height:290px"] { height: 210px !important; }
+  .chart-main { height: 240px; }
+  .chart-sm { height: 210px; }
 
   /* Metrics */
   .metrics-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
@@ -333,7 +377,7 @@ tbody tr:hover td { background: var(--hover); }
     <div class="header-stats">
       <div class="hstat">
         <div class="hstat-label">Portfolio Value</div>
-        <div class="hstat-value dyn" id="headerTotal">$1,000,000</div>
+        <div class="hstat-value dyn" id="headerTotal" aria-live="polite">$1,000,000</div>
       </div>
     </div>
     <button class="btn" id="copyBtn" onclick="copyLink()" title="Copy a link that restores this exact allocation, selection and settings">Copy link</button>
@@ -387,10 +431,10 @@ tbody tr:hover td { background: var(--hover); }
     </div>
     <div class="sidebar-label">Presets</div>
     <div class="preset-grid">
-      <button class="btn btn-preset" title="20% equity, 60% fixed income, 20% real assets/cash" onclick="setPreset('conservative')">Conservative</button>
-      <button class="btn btn-preset" title="60% equity, 30% bonds, 10% real assets" onclick="setPreset('balanced')">Balanced</button>
-      <button class="btn btn-preset" title="85% equity, 5% bonds, 10% alts" onclick="setPreset('aggressive')">Aggressive</button>
-      <button class="btn btn-preset" title="100% spread across equity asset classes" onclick="setPreset('allEquity')">All Equity</button>
+      <button class="btn btn-preset" data-preset="conservative" onclick="setPreset('conservative')">Conservative</button>
+      <button class="btn btn-preset" data-preset="balanced" onclick="setPreset('balanced')">Balanced</button>
+      <button class="btn btn-preset" data-preset="aggressive" onclick="setPreset('aggressive')">Aggressive</button>
+      <button class="btn btn-preset" data-preset="allEquity" onclick="setPreset('allEquity')">All Equity</button>
     </div>
     <div class="sidebar-label">Recessions</div>
     <div class="btn-row">
@@ -398,6 +442,18 @@ tbody tr:hover td { background: var(--hover); }
       <button class="btn btn-full" onclick="clearAll()">Clear All</button>
     </div>
     <div class="rec-list" id="recList"></div>
+    <details class="sidebar-help">
+      <summary>What do these controls do?</summary>
+      <dl>
+        <dt>$ Value / % Change</dt><dd>Dollar value over time, or percentage moved from the pre-recession peak. Use % Change to compare recessions of very different sizes.</dd>
+        <dt>Nominal / Real</dt><dd>Real adjusts for inflation — what the money could actually buy. It matters most in the 1970s and early 1980s, when 1980's –17% nominal is far worse once ~13.5% CPI is applied.</dd>
+        <dt>Price Ret. / +Dividends</dt><dd>Adds dividend and interest income on top of price movement. Yields were much higher in earlier decades — around 5.5% on equities in the 1930s against ~1.5% in 2001.</dd>
+        <dt>Linear / Log</dt><dd>A log axis stops an outlier like the Great Depression flattening every other line into a band. Unavailable in % Change mode, where values cross zero.</dd>
+        <dt>Rebalance</dt><dd>Annual sells what held up and buys what fell, once a year, restoring your target weights — the discipline most investors find hardest in a crash.</dd>
+        <dt>Benchmark</dt><dd>Overlays the same starting capital held entirely in the S&amp;P 500, on the same basis, so you can see whether diversifying actually helped.</dd>
+        <dt>Monthly withdrawal</dt><dd>Money taken out every month during the recession. Selling into a drawdown locks in losses the recovery never gives back — the sequence-of-returns problem.</dd>
+      </dl>
+    </details>
     <div class="sidebar-note">
       S&amp;P 500 figures verified against Bloomberg / Winthrop Wealth bear market tables and Shiller data. See full methodology at the bottom of the page.
     </div>
@@ -442,14 +498,16 @@ tbody tr:hover td { background: var(--hover); }
           <div class="panel-sub" id="chartSub">Select a recession in the sidebar to begin</div>
         </div>
       </div>
-      <div class="chart-wrap" style="height:320px;">
+      <div class="chart-wrap chart-main">
         <div class="empty-state" id="emptyState">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M3 14l6-6 4 4 8-8M21 4h-6M21 4v6"/><path d="M3 21h18"/>
           </svg>
           <p>Select one or more recessions from the sidebar</p>
         </div>
-        <canvas id="mainChart" style="display:none;"></canvas>
+        <canvas id="mainChart" style="display:none;" role="img"
+          aria-label="Portfolio value through recession and recovery"
+          aria-describedby="compTable"></canvas>
       </div>
     </div>
 
@@ -463,12 +521,14 @@ tbody tr:hover td { background: var(--hover); }
     <div class="chart-grid-2">
       <div class="panel">
         <div class="panel-title" style="margin-bottom:14px;">Dollar Impact by Asset Class</div>
-        <div class="chart-wrap" style="height:290px;"><canvas id="assetChart"></canvas></div>
+        <div class="chart-wrap chart-sm"><canvas id="assetChart" role="img"
+          aria-label="Dollar impact by asset class"></canvas></div>
         <div id="assetNote" style="font-size:11px;color:var(--muted);margin-top:10px;"></div>
       </div>
       <div class="panel">
         <div class="panel-title" style="margin-bottom:14px;">Current Allocation</div>
-        <div class="chart-wrap" style="height:290px;"><canvas id="donutChart"></canvas></div>
+        <div class="chart-wrap chart-sm"><canvas id="donutChart" role="img"
+          aria-label="Current allocation by asset class"></canvas></div>
       </div>
     </div>
 
@@ -489,98 +549,7 @@ tbody tr:hover td { background: var(--hover); }
     <!-- Preset definitions -->
     <div class="presets-panel">
       <h2>Portfolio Preset Definitions</h2>
-      <div class="presets-def-grid">
-
-        <!-- Conservative -->
-        <div class="preset-def-card">
-          <div class="preset-def-name">Conservative</div>
-          <div class="preset-def-tag">Capital preservation — 20% equity, 60% fixed income, 20% real assets &amp; cash. Designed to weather downturns with minimal drawdown at the cost of lower long-run growth.</div>
-          <div class="preset-group-label">Equity — 20%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">10%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">3%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">2%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">2.5%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">2.5%</span></div>
-          </div>
-          <div class="preset-group-label">Fixed Income — 60%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#3b82f6"></span>Bonds</span><span class="preset-def-pct">45%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#06b6d4"></span>CDs</span><span class="preset-def-pct">15%</span></div>
-          </div>
-          <div class="preset-group-label">Real Assets &amp; Cash — 20%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f59e0b"></span>REIT</span><span class="preset-def-pct">5%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#eab308"></span>Gold &amp; Silver</span><span class="preset-def-pct">5%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#64748b"></span>Cash &amp; Savings</span><span class="preset-def-pct">10%</span></div>
-          </div>
-        </div>
-
-        <!-- Balanced -->
-        <div class="preset-def-card">
-          <div class="preset-def-name">Balanced</div>
-          <div class="preset-def-tag">Classic 60/40 variant — 60% equity, 30% fixed income, 10% real assets. The traditional moderate-risk benchmark used by pension funds and target-date funds.</div>
-          <div class="preset-group-label">Equity — 60%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">30%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">10%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">5%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">7.5%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">7.5%</span></div>
-          </div>
-          <div class="preset-group-label">Fixed Income — 30%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#3b82f6"></span>Bonds</span><span class="preset-def-pct">20%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#06b6d4"></span>CDs</span><span class="preset-def-pct">10%</span></div>
-          </div>
-          <div class="preset-group-label">Real Assets &amp; Cash — 10%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f59e0b"></span>REIT</span><span class="preset-def-pct">6%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#eab308"></span>Gold &amp; Silver</span><span class="preset-def-pct">2%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#64748b"></span>Cash &amp; Savings</span><span class="preset-def-pct">2%</span></div>
-          </div>
-        </div>
-
-        <!-- Aggressive -->
-        <div class="preset-def-card">
-          <div class="preset-def-name">Aggressive</div>
-          <div class="preset-def-tag">Growth-oriented — 85% equity, 5% bonds, 10% alternatives. Maximizes long-run expected return with significant exposure to small cap, EM, and crypto volatility.</div>
-          <div class="preset-group-label">Equity — 85%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">35%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">15%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">10%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">15%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">10%</span></div>
-          </div>
-          <div class="preset-group-label">Fixed Income — 5%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#3b82f6"></span>Bonds</span><span class="preset-def-pct">5%</span></div>
-          </div>
-          <div class="preset-group-label">Alternatives — 10%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f59e0b"></span>REIT</span><span class="preset-def-pct">4%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#eab308"></span>Gold &amp; Silver</span><span class="preset-def-pct">3%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#f97316"></span>Crypto</span><span class="preset-def-pct">3%</span></div>
-          </div>
-        </div>
-
-        <!-- All Equity -->
-        <div class="preset-def-card">
-          <div class="preset-def-name">All Equity</div>
-          <div class="preset-def-tag">Maximum equity exposure — 100% spread across equity asset classes. No bonds, cash, or alternatives. Historically highest long-run return, and the largest drawdowns.</div>
-          <div class="preset-group-label">Equity — 100%</div>
-          <div class="preset-def-rows">
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#6366f1"></span>Large Cap (US)</span><span class="preset-def-pct">45%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#8b5cf6"></span>Mid Cap</span><span class="preset-def-pct">20%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#a855f7"></span>Small Cap</span><span class="preset-def-pct">10%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#22c55e"></span>Emerging Markets</span><span class="preset-def-pct">15%</span></div>
-            <div class="preset-def-row"><span class="preset-def-label"><span class="preset-def-dot" style="background:#10b981"></span>Developed Markets</span><span class="preset-def-pct">10%</span></div>
-          </div>
-          <div style="font-size:11px;color:var(--faint);margin-top:10px;font-style:italic;">Bonds, CDs, REIT, Gold, Crypto, Cash — all 0%</div>
-        </div>
-
-      </div>
+      <div class="presets-def-grid" id="presetDefs"></div>
     </div>
 
     <!-- Methodology, Data Sources & Limitations -->
@@ -708,6 +677,21 @@ const PRESETS = {
   allEquity:    { largeCap:.45, midCap:.20, smallCap:.10, emerging:.15, developed:.10,
                   bonds:0,    cds:0,    reit:0,    crypto:0, goldSilver:0,    cash:0  },
 };
+
+// Descriptions and grouping for the preset documentation panel. Rendered from the
+// same PRESETS object the buttons apply, so the panel cannot describe a mix the
+// tool does not actually produce — it previously repeated 40 percentages by hand.
+const PRESET_META = {
+  conservative: {name:'Conservative', tag:'Capital preservation. Designed to weather downturns with minimal drawdown at the cost of lower long-run growth.'},
+  balanced:     {name:'Balanced',     tag:'Classic 60/40 variant — the traditional moderate-risk benchmark used by pension funds and target-date funds.'},
+  aggressive:   {name:'Aggressive',   tag:'Growth-oriented. Maximises long-run expected return with significant exposure to small cap, EM and crypto volatility.'},
+  allEquity:    {name:'All Equity',   tag:'Maximum equity exposure, spread across equity asset classes. Historically the highest long-run return, and the largest drawdowns.'},
+};
+const ASSET_GROUPS = [
+  {label:'Equity',             keys:['largeCap','midCap','smallCap','emerging','developed']},
+  {label:'Fixed Income',       keys:['bonds','cds']},
+  {label:'Real Assets & Cash', keys:['reit','goldSilver','crypto','cash']},
+];
 
 let ALLOC = cp(BASE);
 function cp(s){ const o={}; for(const[k,v] of Object.entries(s)) o[k]={...v}; return o; }
@@ -842,15 +826,21 @@ function renderEditor() {
   document.getElementById('allocGrid').innerHTML = Object.entries(ALLOC).map(([k,a]) => `
     <div class="alloc-row">
       <div class="alloc-dot" style="background:${a.color}"></div>
-      <div class="alloc-label">${a.label}</div>
+      <label class="alloc-label" for="alloc-${k}">${a.label}</label>
       <div class="alloc-input-wrap">
-        <span class="alloc-prefix">$</span>
-        <input class="alloc-input" type="number" min="0" step="1000" value="${Math.round(a.value)}"
+        <span class="alloc-prefix" aria-hidden="true">$</span>
+        <input class="alloc-input" id="alloc-${k}" type="number" min="0" step="1000"
+          value="${Math.round(a.value)}" aria-describedby="pct-${k}"
           oninput="onInput('${k}',this.value)">
       </div>
       <div class="alloc-pct" id="pct-${k}">${(a.pct*100).toFixed(1)}%</div>
     </div>`).join('');
   fmtTot(tot());
+}
+let redrawTimer = null;
+function scheduleRedraw() {
+  clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(refreshAll, 120);
 }
 function onInput(k, v) {
   ALLOC[k].value = Math.max(0, parseFloat(v)||0);
@@ -860,7 +850,7 @@ function onInput(k, v) {
     if(el) el.textContent = (ALLOC[key].pct*100).toFixed(1)+'%';
   });
   fmtTot(tot());
-  refreshAll();
+  scheduleRedraw();
 }
 function fmtTot(t) {
   const s='$'+Math.round(t).toLocaleString();
@@ -1002,10 +992,18 @@ function sim(r) {
 
 // The S&P 500 alone, on the same basis and the same starting capital — the reference
 // the whole tool is implicitly arguing against.
+function benchSim(r) {
+  const t = tot(), ck = 'bench:' + r.id;
+  sim(r); // establishes the cache generation for the current state
+  if (!simCache.has(ck)) {
+    const only = {};
+    Object.keys(ALLOC).forEach(k => only[k] = {value: k === 'largeCap' ? t : 0});
+    simCache.set(ck, simulate(r, Object.assign(simOpts(), {alloc: only})));
+  }
+  return simCache.get(ck);
+}
 function benchPath(r, mode) {
-  const t = tot();
-  const only = {}; Object.keys(ALLOC).forEach(k => only[k] = {value: k==='largeCap' ? t : 0});
-  const s = simulate(r, Object.assign(simOpts(), {alloc: only}));
+  const t = tot(), s = benchSim(r);
   return mode === 'indexed'
     ? s.total.map(v => t > 0 ? ((v/t) - 1)*100 : 0)
     : s.total;
@@ -1073,12 +1071,17 @@ function badge(spx) {
 function renderSidebar() {
   document.getElementById('recList').innerHTML = RECESSIONS.map(r=>{
     const[lbl,cls]=badge(r.spx);
-    return `<div class="rec-item ${selected.has(r.id)?'active':''}"
-      onclick="tog('${r.id}')" onmouseenter="hov('${r.id}')" onmouseleave="hov(null)">
-      <div class="rec-dot" style="background:${r.color}"></div>
-      <div class="rec-info"><div class="rec-name">${r.name}</div><div class="rec-period">${r.period}</div></div>
+    const on=selected.has(r.id);
+    // A button, not a div: this is the app's primary control and it used to be
+    // unreachable without a mouse. Focus previews the asset chart too.
+    return `<button type="button" role="checkbox" aria-checked="${on}"
+      class="rec-item ${on?'active':''}"
+      onclick="tog('${r.id}')" onmouseenter="hov('${r.id}')" onmouseleave="hov(null)"
+      onfocus="hov('${r.id}')" onblur="hov(null)">
+      <span class="rec-dot" style="background:${r.color}"></span>
+      <span class="rec-info"><span class="rec-name">${r.name}</span><span class="rec-period">${r.period}</span></span>
       <span class="rec-badge ${cls}">${lbl}</span>
-    </div>`;
+    </button>`;
   }).join('');
 }
 
@@ -1134,6 +1137,9 @@ function renderMainChart() {
   const modeTag=[realMode?'Real':'',divMode?'+Div':'',rebalanceOn?'Rebal':'',
     withdrawAmt>0?'−$'+Math.round(withdrawAmt).toLocaleString()+'/mo':'',
     benchOn&&recs.length!==1?'benchmark needs a single recession':''].filter(Boolean).join(' · ');
+  canvas.setAttribute('aria-label',
+    'Line chart, portfolio value through ' + recs.map(r=>r.name).join(', ')
+    + '. The comparison table below the chart carries the same figures as text.');
   document.getElementById('chartSub').textContent = (recs.length===1
     ? `${recs[0].name} · ${maxM} months total`
     : `${recs.length} recessions compared`) + (modeTag ? ` · ${modeTag}` : '');
@@ -1297,6 +1303,44 @@ function renderTable(recs) {
   }).join('');
 }
 
+const fmtPct = f => (Math.round(f*1000)/10) + '%';
+function renderPresetDefs(){
+  document.getElementById('presetDefs').innerHTML = Object.keys(PRESETS).map(key => {
+    const mix = PRESETS[key], meta = PRESET_META[key];
+    const groups = ASSET_GROUPS.map(g => {
+      const rows = g.keys.filter(k => (mix[k] || 0) > 0);
+      if (!rows.length) return '';
+      const sum = g.keys.reduce((a,k) => a + (mix[k] || 0), 0);
+      return `<div class="preset-group-label">${g.label} — ${fmtPct(sum)}</div>
+        <div class="preset-def-rows">${rows.map(k => `
+          <div class="preset-def-row">
+            <span class="preset-def-label"><span class="preset-def-dot" style="background:${BASE[k].color}"></span>${BASE[k].label}</span>
+            <span class="preset-def-pct">${fmtPct(mix[k])}</span>
+          </div>`).join('')}</div>`;
+    }).join('');
+    const zero = Object.keys(BASE).filter(k => !(mix[k] > 0)).map(k => BASE[k].label);
+    return `<div class="preset-def-card">
+      <div class="preset-def-name">${meta.name}</div>
+      <div class="preset-def-tag">${meta.tag}</div>
+      ${groups}
+      ${zero.length ? `<div class="preset-def-zero">${zero.join(', ')} — all 0%</div>` : ''}
+    </div>`;
+  }).join('');
+}
+// The sidebar buttons describe the same mixes, so they read from it too.
+function presetSummary(key){
+  const mix = PRESETS[key];
+  return ASSET_GROUPS.map(g => {
+    const sum = g.keys.reduce((a,k) => a + (mix[k] || 0), 0);
+    return sum > 0 ? fmtPct(sum) + ' ' + g.label.toLowerCase() : '';
+  }).filter(Boolean).join(', ');
+}
+function syncPresetButtons(){
+  document.querySelectorAll('[data-preset]').forEach(b => {
+    b.title = PRESET_META[b.dataset.preset].name + ': ' + presetSummary(b.dataset.preset);
+  });
+}
+
 // Any recession whose data departs from a documented proxy rule must carry a written
 // reason (verify.js enforces this); render them so the page states them out loud.
 function renderProxyExceptions(){
@@ -1343,7 +1387,7 @@ function syncControls(){
   document.getElementById('withdrawInflate').checked = withdrawInflate;
   syncLogAvailability();
 }
-function onWithdraw(v){ withdrawAmt=Math.max(0,parseFloat(v)||0); refreshAll(); }
+function onWithdraw(v){ withdrawAmt=Math.max(0,parseFloat(v)||0); scheduleRedraw(); }
 function onWithdrawInflate(on){ withdrawInflate=on; refreshAll(); }
 function setRebalance(on){ rebalanceOn=on; syncControls(); refreshAll(); }
 function setBench(on){ benchOn=on; syncControls(); renderMainChart(); }
@@ -1428,7 +1472,16 @@ function copyLink(){
 }
 
 // ─── Init ─────────────────────────────────────────────
-syncThemeBtn(); renderProxyExceptions();
+// Chart.js comes from a CDN. If it is blocked the page still renders its numbers,
+// so say what happened rather than dying with a console-only ReferenceError.
+if (typeof Chart === 'undefined') {
+  document.querySelectorAll('.chart-wrap').forEach(w => {
+    w.innerHTML = '<div class="empty-state"><p>Charts could not load — the Chart.js CDN is '
+      + 'unreachable. Every figure below the chart is still accurate.</p></div>';
+  });
+  window.Chart = function(){ return { destroy(){}, update(){} }; };
+}
+syncThemeBtn(); renderProxyExceptions(); renderPresetDefs(); syncPresetButtons();
 // A shared link wins; otherwise open on the two recessions most people recognise.
 if (!applyHash()) { selected.add('r2008'); selected.add('r2020'); }
 syncControls();
