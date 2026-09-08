@@ -58,10 +58,12 @@ const appSrc = blocks[blocks.length - 1].split('</script>')[0];
 const EXPOSE = `;({ simulate, sim, makePath, assetImpact, contribs, extremeIndex, recoveryMonths,
   pathExtreme, tot, pct, existed, deflator, fmtRec, cp,
   ALLOC, BASE, PRESETS, RECESSIONS, LONG_RUN_INFLATION, POST_RECOVERY_GROWTH,
-  stateToHash, applyHash, benchPath, benchDrawdown, simulate,
+  stateToHash, applyHash, benchPath, benchDrawdown, benchSim, simulate,
+  endOfPath, extremeOf, syncBenchAvailability, renderEditor, emergencyMonths,
+  onEmergencyFund, renderEmergencyNote,
   ASSET_GROUPS, PRESET_META, renderPresetDefs, presetSummary,
   state: () => ({ chartMode, realMode, divMode, logScale, withdrawAmt,
-                  withdrawInflate, rebalanceOn, benchOn,
+                  withdrawInflate, rebalanceOn, benchOn, emergencyFund,
                   selected: Array.from(selected).sort().join(','),
                   alloc: Object.keys(ALLOC).map(k => k+':'+Math.round(ALLOC[k].value)).join(',') }),
   setState: (o) => { if (o.chartMode !== undefined) chartMode = o.chartMode;
@@ -72,6 +74,7 @@ const EXPOSE = `;({ simulate, sim, makePath, assetImpact, contribs, extremeIndex
                      if (o.withdrawInflate !== undefined) withdrawInflate = o.withdrawInflate;
                      if (o.rebalanceOn !== undefined) rebalanceOn = o.rebalanceOn;
                      if (o.benchOn !== undefined) benchOn = o.benchOn;
+                     if (o.emergencyFund !== undefined) emergencyFund = o.emergencyFund;
                      if (o.selected !== undefined) selected = new Set(o.selected);
                      simCacheKey = ''; },
   setModes: (rm, dm) => { realMode = rm; divMode = dm; simCacheKey = ''; },
@@ -95,6 +98,11 @@ for (const r of A.RECESSIONS) {
   ok('data/' + r.id + '/d covers all assets',  missD.length === 0,  'missing ' + missD);
   ok('data/' + r.id + '/dy covers all assets', missDy.length === 0, 'missing ' + missDy);
   ok('data/' + r.id + '/has dur+rec', r.dur >= 0 && r.rec >= 0);
+  // Cash & Savings is a HYSA, so its yield is a real rate. It was 0 on all 15 rows,
+  // which made the +Dividends toggle a no-op for anyone holding cash.
+  ok('data/' + r.id + '/cash carries a savings rate',
+     typeof r.dy.cash === 'number' && isFinite(r.dy.cash) && r.dy.cash >= 0,
+     'got ' + r.dy.cash);
 }
 
 // ── 2. Preset fractions sum to 1.0 ───────────────────────────────────────────
@@ -167,6 +175,20 @@ for (const r of A.RECESSIONS) {
   ok('proxy/' + r.id + ' pre-2009 crypto zero',
      r.d.crypto === 0 && r.dy.crypto === 0, 'd=' + r.d.crypto + ' dy=' + r.dy.crypto);
 }
+// Regulation Q capped what banks could pay on retail savings deposits until
+// deregulation completed in 1986, so a savings account could not track the T-bill
+// rate before then however high T-bills went (12.5% in 1981-82).
+const REG_Q_CEILING = 5.25;
+for (const r of A.RECESSIONS) {
+  if (parseInt(r.period.slice(0,4), 10) >= 1986) continue;
+  ok('proxy/' + r.id + ' pre-1986 cash respects Reg Q', r.dy.cash <= REG_Q_CEILING,
+     'dy.cash=' + r.dy.cash + ' exceeds the ' + REG_Q_CEILING + '% ceiling');
+}
+// A savings account should not out-yield a CD of the same era.
+for (const r of A.RECESSIONS) {
+  ok('data/' + r.id + ' cash does not out-yield CDs', r.dy.cash <= r.dy.cds,
+     'cash=' + r.dy.cash + ' cds=' + r.dy.cds);
+}
 // The large-cap series should carry the same precision as the headline S&P figure.
 for (const r of A.RECESSIONS) {
   ok('data/' + r.id + ' largeCap matches spx', r.d.largeCap === r.spx,
@@ -226,6 +248,37 @@ for (const [rm, dm] of MODES) {
       ok('recovery/' + tag + ' not earlier than reported',
          ex + rec === ex || s.total[ex + rec - 1] < t + 0.01);
     }
+
+    // (g) the DRAWN line stops where the recovery figure says it does. It used to run
+    //     to the end of the modelled window regardless, so any path that regained its
+    //     baseline early carried on climbing: the Great Depression in Real +Dividends
+    //     drew 224 months past recovery and ended at 2.32x its start while the panel
+    //     beside it reported recovery in 43 months.
+    const p = A.makePath(r, 'absolute');
+    const dipped = s.total[ex] < t;
+    if (dipped && rec !== null) {
+      ok('chart/' + tag + ' stops where recovery says', p.length - 1 === ex + rec,
+         'drawn to m' + (p.length - 1) + ' but recovery is m' + (ex + rec));
+      ok('chart/' + tag + ' ends on baseline', near(p[p.length - 1], t, t * 0.03),
+         'ends at $' + Math.round(p[p.length - 1]) + ' against a $' + t + ' start');
+      // The symptom itself: no drawn point after the trough may run away from baseline.
+      const peak = Math.max.apply(null, p.slice(ex));
+      ok('chart/' + tag + ' never climbs past baseline', peak <= t * 1.03,
+         'peaked at ' + (peak / t).toFixed(3) + 'x start');
+    } else {
+      // Nothing to cut back to: 1945 never dipped, and a path that never recovers has
+      // no crossing. Both must draw in full rather than collapse.
+      ok('chart/' + tag + ' draws in full when there is nothing to cut',
+         p.length === s.total.length, 'drew ' + p.length + ' of ' + s.total.length);
+    }
+    // % Change mode is the same slice, so the two views cannot disagree on length.
+    ok('chart/' + tag + ' indexed matches absolute length',
+       A.makePath(r, 'indexed').length === p.length);
+    // The S&P overlay stops on the same rule, against its own simulation.
+    const bs = A.benchSim(r), bp = A.benchPath(r, 'absolute');
+    ok('chart/' + tag + ' benchmark stops on the same rule',
+       bp.length - 1 === A.endOfPath(bs, r.dur),
+       'drew ' + (bp.length - 1) + ' of ' + A.endOfPath(bs, r.dur));
   }
 }
 
@@ -365,6 +418,244 @@ for (const r of A.RECESSIONS) {
   ok('feature/benchmark beats a diversified book in 2008',
      A.benchDrawdown(r08) < (A.pathExtreme(r08)/t - 1)*100,
      'bench ' + A.benchDrawdown(r08).toFixed(2) + '% vs mix ' + ((A.pathExtreme(r08)/t-1)*100).toFixed(2) + '%');
+}
+
+// ── 11. The three reported bugs, pinned by name ─────────────────────────────
+// (a) The Great Depression line climbing to $2.32M against a $1M start.
+{
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ withdrawAmt:0, rebalanceOn:false, realMode:true, divMode:true });
+  const gd = A.RECESSIONS.find(r => r.id === 'depression'), t = A.tot();
+  const p = A.makePath(gd, 'absolute');
+  ok('regression/depression Real+Div stops at recovery', p.length - 1 < 120,
+     'drew ' + (p.length - 1) + ' months; it used to draw 308');
+  ok('regression/depression Real+Div ends at its start value',
+     near(p[p.length - 1], t, t * 0.01),
+     'ended at $' + Math.round(p[p.length - 1]) + '; it used to end at $2,323,000');
+  // The chart and the figure printed beside it must tell the same story.
+  ok('regression/depression drawn length matches the reported recovery',
+     p.length - 1 === A.extremeIndex(gd) + A.recoveryMonths(gd));
+
+  // 1945 rose +38% throughout and never dipped, so it reports "0 months to normalise".
+  // Cutting on that figure would leave a single point.
+  A.setState({ realMode:false, divMode:false });
+  const r45 = A.RECESSIONS.find(r => r.id === 'r1945');
+  ok('regression/1945 is not collapsed to a point',
+     A.makePath(r45,'absolute').length === A.sim(r45).total.length,
+     'drew ' + A.makePath(r45,'absolute').length + ' points');
+}
+
+// (b) Cash & Savings earned nothing: dy.cash was 0 on all 15 rows, so a 100% cash
+//     book ended at exactly its starting value whether or not +Dividends was on.
+{
+  const cashOnly = A.cp(A.BASE);
+  Object.keys(cashOnly).forEach(k => cashOnly[k].value = (k === 'cash' ? 100000 : 0));
+  A.setAlloc(cashOnly);
+  for (const id of ['r1990', 'r2008', 'depression']) {
+    const r = A.RECESSIONS.find(x => x.id === id);
+    A.setState({ realMode:false, divMode:false });
+    const price = A.sim(r).total[A.sim(r).total.length - 1];
+    A.setState({ realMode:false, divMode:true });
+    const total = A.sim(r).total[A.sim(r).total.length - 1];
+    ok('regression/' + id + ' HYSA pays interest', total > price + 1,
+       'price-return $' + Math.round(price) + ' vs +Dividends $' + Math.round(total));
+  }
+  // Principal is still flat in price-return mode — the yield is income, not a return.
+  A.setState({ realMode:false, divMode:false });
+  const r90 = A.RECESSIONS.find(x => x.id === 'r1990');
+  ok('regression/cash principal stays flat in Price Ret.',
+     near(A.sim(r90).total[A.sim(r90).total.length - 1], 100000, 0.01));
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ realMode:false, divMode:false });
+}
+
+// (c) The vs S&P button stayed lit while doing nothing whenever more than one
+//     recession was selected.
+{
+  const btn = els['btn-bench-on'];
+  A.setState({ selected:['r2008'] });   A.syncBenchAvailability();
+  ok('ui/benchmark enabled for a single recession', btn.disabled === false);
+  A.setState({ selected:['r2008','r2001'] }); A.syncBenchAvailability();
+  ok('ui/benchmark disabled for several recessions', btn.disabled === true);
+  ok('ui/benchmark says why it is unavailable',
+     /one recession at a time/.test(btn.title), 'title: ' + btn.title);
+  A.setState({ selected:[] }); A.syncBenchAvailability();
+  ok('ui/benchmark disabled with nothing selected', btn.disabled === true);
+  // Unlike the log axis, the setting is inapplicable rather than invalid, so the
+  // user's choice must survive widening and re-narrowing the selection.
+  A.setState({ selected:['r2008'], benchOn:true }); A.syncBenchAvailability();
+  A.setState({ selected:['r2008','r2001'] });       A.syncBenchAvailability();
+  ok('ui/benchmark setting survives a wider selection', A.state().benchOn === true);
+  A.setState({ selected:['r2008'] }); A.syncBenchAvailability();
+  ok('ui/benchmark comes back when narrowed again',
+     btn.disabled === false && A.state().benchOn === true);
+  A.setState({ benchOn:false });
+}
+
+// (d) The two interest-bearing buckets pay income only in +Dividends mode, which is
+//     not guessable from the name — and cash silently changed from a mattress to a
+//     HYSA. That has to be legible in the allocation editor itself, not only in a
+//     title= tooltip, which touch devices never show.
+{
+  for (const k of ['cash', 'cds']) {
+    ok('ui/' + k + ' states its yield assumption on screen',
+       typeof A.BASE[k].note === 'string' && /\+Dividends/.test(A.BASE[k].note),
+       'note: ' + A.BASE[k].note);
+    ok('ui/' + k + ' carries a fuller explanation on hover',
+       typeof A.BASE[k].about === 'string' && A.BASE[k].about.length > 80);
+  }
+  ok('ui/cash names the HYSA assumption', /high-yield savings/i.test(A.BASE.cash.about));
+  ok('ui/cash names the Reg Q cap', /regulation q/i.test(A.BASE.cash.about));
+
+  // The note has to survive rendering, not just sit in the data.
+  A.setAlloc(A.cp(A.BASE));
+  A.renderEditor();
+  const html = els['allocGrid'].innerHTML;
+  ok('ui/editor renders the cash note', html.includes(A.BASE.cash.note),
+     'note missing from the rendered allocation editor');
+  ok('ui/editor renders the cash tooltip', html.includes('high-yield savings account'));
+  // Assets with nothing surprising to say must not grow an empty note element.
+  const noteCount = (html.match(/class="alloc-note"/g) || []).length;
+  ok('ui/only the interest-bearing rows carry a note', noteCount === 2,
+     'found ' + noteCount + ' notes, expected 2');
+}
+
+// ── 12. The emergency fund ──────────────────────────────────────────────────
+// Held outside the portfolio and spent before anything is sold, so that the tool can
+// actually show what a buffer buys you: the whole thesis of the withdrawal feature is
+// that selling into a drawdown locks in losses, and a fund is the standard defence.
+{
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ realMode:false, divMode:false, rebalanceOn:false, withdrawInflate:false,
+               withdrawAmt:0, emergencyFund:0, selected:['r2008'] });
+  const r08 = A.RECESSIONS.find(x => x.id === 'r2008'), t = A.tot();
+
+  // It is money outside the portfolio: it must not touch the total or the weights.
+  A.setState({ emergencyFund:250000 });
+  ok('ef/does not change the portfolio total', near(A.tot(), t, 0.01),
+     'total moved to $' + A.tot());
+  ok('ef/does not change the starting path value', near(A.sim(r08).total[0], t, 0.01));
+  ok('ef/is reported on the simulation', A.sim(r08).efStart === 250000);
+
+  // With no withdrawal there is nothing to spend it on, so it must change nothing.
+  A.setState({ withdrawAmt:0, emergencyFund:0 });
+  const noDraw = A.sim(r08).total.slice();
+  A.setState({ emergencyFund:250000 });
+  ok('ef/is inert with no withdrawal',
+     A.sim(r08).total.every((v,i) => near(v, noDraw[i], 1e-9)));
+
+  // A fund big enough to cover every withdrawal must leave the portfolio untouched —
+  // identical, point for point, to never having withdrawn at all.
+  A.setState({ withdrawAmt:5000, emergencyFund:5000 * 400 });
+  const shielded = A.sim(r08).total;
+  ok('ef//a fund that outlasts the window shields the portfolio entirely',
+     shielded.every((v,i) => near(v, noDraw[i], 1e-6)),
+     'portfolio moved despite a fund that covers every withdrawal');
+  ok('ef/never-exhausted fund reports no depletion month',
+     A.sim(r08).efDepletedAt === null);
+
+  // A fund that runs out must hand over at the right month and then behave as before.
+  A.setState({ withdrawAmt:5000, emergencyFund:50000 });
+  const s = A.sim(r08);
+  ok('ef/runs out when the arithmetic says', s.efDepletedAt === 10,
+     '$50,000 at $5,000/mo should last 10 months, got ' + s.efDepletedAt);
+  ok('ef/portfolio is untouched until the fund is gone',
+     s.total.slice(0, s.efDepletedAt).every((v,i) => near(v, noDraw[i], 1e-6)));
+  ok('ef/portfolio is drawn down once the fund is gone',
+     s.total[s.total.length-1] < noDraw[noDraw.length-1] - 1);
+
+  // More buffer is always weakly better, never worse.
+  A.setState({ emergencyFund:0 });       const none = A.pathExtreme(r08);
+  A.setState({ emergencyFund:50000 });   const some = A.pathExtreme(r08);
+  A.setState({ emergencyFund:200000 });  const lots = A.pathExtreme(r08);
+  ok('ef/a bigger fund never deepens the drawdown', some >= none - 0.01 && lots >= some - 0.01,
+     'none $' + Math.round(none) + ' → 50k $' + Math.round(some) + ' → 200k $' + Math.round(lots));
+  ok('ef/a fund measurably softens the drawdown', lots > none + 1000);
+
+  // It must also delay outright depletion rather than merely deepening it later.
+  A.setState({ withdrawAmt:60000, emergencyFund:0 });
+  const depNoEF = A.sim(r08).depletedAt;
+  A.setState({ emergencyFund:600000 });
+  const depEF = A.sim(r08).depletedAt;
+  ok('ef/delays portfolio exhaustion', depNoEF !== null && depEF !== null && depEF > depNoEF,
+     'without $' + depNoEF + ' vs with $' + depEF);
+
+  // The cover readout is plain arithmetic on the two inputs.
+  A.setState({ withdrawAmt:5000, emergencyFund:60000 });
+  ok('ef/cover figure is fund over withdrawal', A.emergencyMonths() === 12);
+  A.setState({ withdrawAmt:0 });
+  ok('ef/no cover figure without a withdrawal', A.emergencyMonths() === null);
+  A.setState({ withdrawAmt:5000, emergencyFund:0 });
+  ok('ef/no cover figure without a fund', A.emergencyMonths() === null);
+
+  // Tier 2: the Cash & Savings bucket absorbs the draw before anything is sold.
+  const withCash = A.cp(A.BASE);
+  Object.keys(withCash).forEach(k =>
+    withCash[k].value = k === 'cash' ? 100000 : (k === 'largeCap' ? 900000 : 0));
+  A.setAlloc(withCash);
+  A.setState({ withdrawAmt:5000, emergencyFund:0 });
+  const c = A.sim(r08), cNo = A.simulate(r08, {alloc:withCash, withdraw:0});
+  // Cash carries r2008's +2% d.cash bump, so it grows slightly even while being spent;
+  // what matters is that it absorbed the entire draw. It gives up a little more than
+  // the cash withdrawn, being the growth foregone on money no longer there.
+  const gaveUp = cNo.byAsset.cash[10] - c.byAsset.cash[10];
+  ok('ef/cash absorbs the whole withdrawal before anything is sold',
+     gaveUp >= 5000*10 && gaveUp <= 5000*10*1.05,
+     'cash gave up $' + Math.round(gaveUp) + ' against $50,000 withdrawn');
+  ok('ef/equities are untouched while cash lasts',
+     c.byAsset.largeCap[10] > 0 &&
+     near(c.byAsset.largeCap[10], cNo.byAsset.largeCap[10], 1.0),
+     'largeCap was sold while the cash bucket still had money in it');
+  // $100k of cash at $5k/mo is gone around month 20; only then may equities be sold.
+  ok('ef/equities are sold once the cash bucket is empty',
+     c.byAsset.cash[30] < 1 && c.byAsset.largeCap[30] < cNo.byAsset.largeCap[30] - 1,
+     'cash $' + Math.round(c.byAsset.cash[30]) + ' largeCap $' + Math.round(c.byAsset.largeCap[30]));
+
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ withdrawAmt:0, emergencyFund:0 });
+
+  // The simulation cache is keyed on the inputs, so the fund has to be part of that
+  // key or typing into the field would redraw a stale chart. setState() flushes the
+  // cache itself, which would hide exactly this bug — so drive the real handler.
+  A.setState({ withdrawAmt:5000, emergencyFund:0, selected:['r2008'] });
+  const stale = A.pathExtreme(r08);
+  A.onEmergencyFund(400000);
+  ok('ef/changing the fund invalidates the simulation cache',
+     A.pathExtreme(r08) > stale + 1,
+     'the chart would have kept showing the simulation from before the change');
+  A.onEmergencyFund(0);
+  ok('ef/clearing the fund invalidates it again', near(A.pathExtreme(r08), stale, 0.01));
+
+  // The on-screen cover caption has to track both inputs.
+  A.setState({ withdrawAmt:5000, emergencyFund:60000 });
+  A.renderEmergencyNote();
+  ok('ef/cover caption states the months', /12 months/.test(els['emergencyNote'].innerHTML),
+     'caption: ' + els['emergencyNote'].innerHTML);
+  A.setState({ withdrawAmt:0, emergencyFund:0 });
+  A.renderEmergencyNote();
+  ok('ef/cover caption is empty with nothing set', els['emergencyNote'].innerHTML === '');
+}
+
+// ── 13. The emergency fund survives a round trip through the URL ────────────
+{
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ withdrawAmt:4000, emergencyFund:75000, selected:['r2008'] });
+  const before = A.state();
+  location.hash = '#' + A.stateToHash();
+  A.setState({ withdrawAmt:0, emergencyFund:0 });
+  ok('url/hash applies with an emergency fund', A.applyHash() === true);
+  ok('url/round-trips emergencyFund', A.state().emergencyFund === before.emergencyFund,
+     'before ' + before.emergencyFund + ' after ' + A.state().emergencyFund);
+
+  // Links written before the field existed carry no e= and must mean "no fund".
+  A.setState({ emergencyFund:99000 });
+  location.hash = '#a=400000.50000.30000.100000.150000.200000.5000.40000.10000.15000.0'
+                + '&s=r2008&m=a&f=000100&w=3000';
+  A.applyHash();
+  ok('url/a link without e= means no emergency fund', A.state().emergencyFund === 0,
+     'got ' + A.state().emergencyFund);
+  ok('url/such a link still restores its withdrawal', A.state().withdrawAmt === 3000);
+  A.setState({ withdrawAmt:0, emergencyFund:0 });
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────

@@ -7,10 +7,12 @@ A portfolio stress-test tool: pick a custom multi-asset allocation, then see how
 ## What it models
 
 - **15 recessions, 1929–2020** — each with its own peak-to-trough drawdown, recovery length, and average inflation rate, cross-referenced against Bloomberg/Winthrop Wealth bear-market tables and Robert Shiller's long-run price dataset. Three data points were explicitly corrected from earlier under/overestimates, and every correction is documented with its source and reasoning.
-- **11-asset allocation model** — equities (large/mid/small cap, EM, developed markets), fixed income (bonds, CDs), and real assets (REIT, gold & silver, crypto, cash). Portfolio drawdown is the allocation-weighted average of each asset class's era-specific return; dollar impact is broken out per asset so "worst asset: REIT –$68,000" is answerable, not just "portfolio down 22%."
+- **11-asset allocation model** — equities (large/mid/small cap, EM, developed markets), fixed income (bonds, CDs), and real assets (REIT, gold & silver, crypto, cash). Cash & Savings is modelled as a high-yield savings account — each era's 3-month T-bill rate, slightly below the CD rate and capped at the Regulation Q ceiling before 1986, since federal law capped retail savings rates until then. Interest on cash and CDs is income, so it appears only in total-return mode, and the allocation editor says so on the row rather than burying it in the methodology. Portfolio drawdown is the allocation-weighted average of each asset class's era-specific return; dollar impact is broken out per asset so "worst asset: REIT –$68,000" is answerable, not just "portfolio down 22%."
 - **Withdrawals and sequence-of-returns risk** — set a monthly draw (optionally growing with the era's CPI) and watch what selling into a drawdown does. Drawing $4,000/month through 2007–09 turns a –44.1% drawdown into –49.3%, and a 48-month recovery into one that never arrives inside the modelled window. Depletion is detected and reported.
+- **Emergency fund** — cash held *outside* the portfolio, so it is excluded from the allocation, every percentage and the Total Portfolio Value, and is spent down before anything is sold. Withdrawals come out in tiers: the fund first, then the Cash & Savings bucket (spending it realises no loss), then everything else pro rata. A $60,000 fund against a $5,000/month draw through 2007–09 leaves the portfolio penny-for-penny untouched for eleven months; the month it runs out is reported per recession, because that is the month the portfolio starts absorbing the hit.
 - **Annual rebalancing** — toggle a yearly reset to target weights, renormalised over the asset classes that existed in that era.
-- **S&P 500 benchmark** — overlay the same starting capital held entirely in the S&P, on the same basis: same real/nominal setting, same dividend treatment, same withdrawal, same rebalancing. Both figures are shown so the "your mix vs that" delta is checkable.
+- **S&P 500 benchmark** — overlay the same starting capital held entirely in the S&P, on the same basis: same real/nominal setting, same dividend treatment, same withdrawal, same rebalancing. Both figures are shown so the "your mix vs that" delta is checkable. The overlay compares one recession at a time and the control disables itself when several are selected; the comparison table carries the same columns for all of them.
+- **Lines stop where the recovery figure says they do** — a path that regains its starting value is not drawn past that point. With dividends on, the Great Depression used to keep climbing to 2.3× its start over 26 years while the panel beside it reported recovery in 43 months; the chart and the reported figure now come from the same rule. Paths that never recover, and 1945 which never dipped, still draw in full.
 - **Shareable links** — allocation, selection and every toggle live in the URL hash, so a scenario survives a reload and can be sent to someone.
 - **Recovery curve shape, not a straight line** — the decline phase uses a smoothstep (cubic Hermite) ease-in/ease-out curve, and the recovery phase uses a square-root curve (fast initial rebound, decelerating tail) — a closer approximation to how real drawdowns and recoveries actually move than linear interpolation between two points.
 - **Real vs. nominal returns** — toggle inflation-adjusted values. This matters most for the 1970s/early-1980s recessions: the 1980 recession's nominal –17% becomes materially worse once ~13.5% CPI is factored in.
@@ -29,7 +31,7 @@ The whole page is keyboard navigable: the recession list is a set of real checkb
 osascript -l JavaScript verify.js
 ```
 
-685 assertions covering the simulation invariants, the recession dataset, the
+1068 assertions covering the simulation invariants, the recession dataset, the
 documented proxy rules, shareable-link round-tripping and the feature behaviour.
 It evaluates the real script block out of `index.html` under stub DOM objects, so
 the tests exercise the shipped code and cannot drift from it. There is no Node on
@@ -40,6 +42,13 @@ headline figure**, in all four real × dividend combinations. That silently brok
 once — the "crypto didn't exist before 2009" carve-out was added to one of the two
 functions that needed it — and the disagreement reached $2,482 before anyone
 noticed. It is now structural (one simulation feeds both) and asserted.
+
+Two traps worth knowing before adding assertions here. `setState()` in the harness
+clears `simCacheKey`, so anything driven through it **cannot** catch a missing entry
+in `sim()`'s cache key — the bug where a field is typed into and the chart redraws
+stale. Drive the real input handler instead. And mutation-test new assertions: copy
+the two files to a scratch directory, revert the fix, and confirm the intended
+assertions actually fail. Both of these caught real gaps.
 
 ## Notes
 
