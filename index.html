@@ -184,6 +184,7 @@ header { background: var(--surface); border-bottom: 1px solid var(--border);
 .mrow-value.red { color: var(--red); }
 .mrow-value.grn { color: var(--green); }
 .metric-quality { font-size: 10px; color: var(--faint); margin-top: 6px; }
+.metric-note { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 8px; }
 
 /* Detail panel */
 .detail-panel { border-left-width: 3px; border-left-style: solid; }
@@ -293,7 +294,15 @@ tbody tr:hover td { background: var(--hover); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
 .sidebar-group { display: flex; flex-direction: column; gap: 4px; }
-.withdraw-ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.withdraw-ctl { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ctl-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ctl-line > .alloc-footer-label:first-child { min-width: 96px; }
+.alloc-suffix { padding: 4px 8px 4px 5px; font-size: 12px; color: var(--muted);
+  border-left: 1px solid var(--border2); }
+.alloc-input.alloc-input-sm { width: 52px; }
+/* Measured in months of costs, so it means nothing until costs are set. */
+.alloc-input-wrap:has(.alloc-input:disabled) { opacity: .45; }
+.alloc-input:disabled { cursor: not-allowed; }
 .chk { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); cursor: pointer; }
 .chk input { accent-color: var(--accent); cursor: pointer; }
 .alloc-footer-right { text-align: right; }
@@ -461,8 +470,8 @@ tbody tr:hover td { background: var(--hover); }
         <dt>Linear / Log</dt><dd>A log axis stops an outlier like the Great Depression flattening every other line into a band. Unavailable in % Change mode, where values cross zero.</dd>
         <dt>Rebalance</dt><dd>Annual sells what held up and buys what fell, once a year, restoring your target weights — the discipline most investors find hardest in a crash.</dd>
         <dt>Benchmark</dt><dd>Overlays the same starting capital held entirely in the S&amp;P 500, on the same basis, so you can see whether diversifying actually helped. One recession at a time — with several selected the control greys out, and the comparison table below the chart carries the same comparison as columns for all of them.</dd>
-        <dt>Monthly withdrawal</dt><dd>Money taken out every month during the recession. Selling into a drawdown locks in losses the recovery never gives back — the sequence-of-returns problem.</dd>
-        <dt>Emergency fund</dt><dd>Cash held <em>outside</em> the portfolio and spent down before anything is sold, so it is not in your allocation, the donut or the Total Portfolio Value. Set a monthly withdrawal, then raise the fund and watch the drawdown get shallower — that difference is what the fund is worth. Once it runs out, the Cash &amp; Savings bucket goes next, then everything else pro rata.</dd>
+        <dt>Monthly costs</dt><dd>What you spend each month that has to come from savings — for example if your income stopped. It is paid every month through the downturn and the recovery. Selling into a drawdown locks in losses the recovery never gives back — the sequence-of-returns problem.</dd>
+        <dt>Emergency fund</dt><dd>How many months of those costs you hold as cash <em>outside</em> the portfolio, spent before anything is sold. It is not in your allocation, the donut or the Total Portfolio Value, and it does nothing until monthly costs are set. Raise it and watch the drawdown get shallower — that difference is what the fund is worth. Once it runs out, the Cash &amp; Savings bucket goes next, then everything else pro rata.</dd>
       </dl>
     </details>
     <div class="sidebar-note">
@@ -484,23 +493,28 @@ tbody tr:hover td { background: var(--hover); }
       <div class="alloc-cols" id="allocGrid"></div>
       <div class="alloc-footer">
         <div class="withdraw-ctl">
-          <label class="alloc-footer-label" for="withdrawInput">Monthly withdrawal</label>
-          <div class="alloc-input-wrap">
-            <span class="alloc-prefix">$</span>
-            <input class="alloc-input" id="withdrawInput" type="number" min="0" step="500" value="0"
-              oninput="onWithdraw(this.value)"
-              title="Money drawn out every month during the recession — the sequence-of-returns question. Selling into a drawdown locks in losses that a recovering portfolio never gets back.">
+          <div class="ctl-line">
+            <label class="alloc-footer-label" for="withdrawInput">Monthly costs</label>
+            <div class="alloc-input-wrap">
+              <span class="alloc-prefix">$</span>
+              <input class="alloc-input" id="withdrawInput" type="number" min="0" step="500" value="0"
+                oninput="onWithdraw(this.value)"
+                title="What you spend each month that has to come from savings — for example if your income stopped. It is paid every month through the downturn and the recovery, which is the sequence-of-returns question: selling into a drawdown locks in losses a recovering portfolio never gets back.">
+            </div>
+            <label class="chk"><input type="checkbox" id="withdrawInflate" checked
+              onchange="onWithdrawInflate(this.checked)"> grow with inflation</label>
+            <span class="alloc-footer-note">paid from savings, e.g. if your income stopped</span>
           </div>
-          <label class="chk"><input type="checkbox" id="withdrawInflate" checked
-            onchange="onWithdrawInflate(this.checked)"> grow with inflation</label>
-          <label class="alloc-footer-label" for="emergencyInput">Emergency fund</label>
-          <div class="alloc-input-wrap">
-            <span class="alloc-prefix">$</span>
-            <input class="alloc-input" id="emergencyInput" type="number" min="0" step="1000" value="0"
-              oninput="onEmergencyFund(this.value)"
-              title="Cash set aside outside the portfolio and spent down before anything is sold. It is not part of your allocation, so it does not appear in the percentages, the donut or the Total Portfolio Value — the point of it is that the portfolio stays untouched while it lasts.">
+          <div class="ctl-line">
+            <label class="alloc-footer-label" for="emergencyInput">Emergency fund</label>
+            <div class="alloc-input-wrap">
+              <input class="alloc-input alloc-input-sm" id="emergencyInput" type="number" min="0" step="1" value="0"
+                oninput="onEmergencyMonths(this.value)" aria-describedby="emergencyNote"
+                title="How many months of your costs you hold as cash outside the portfolio. It is spent before anything is sold, and is not part of your allocation, the donut or the Total Portfolio Value.">
+              <span class="alloc-suffix">months</span>
+            </div>
+            <span class="alloc-footer-note" id="emergencyNote" aria-live="polite"></span>
           </div>
-          <span class="alloc-footer-note" id="emergencyNote"></span>
         </div>
         <div class="alloc-footer-right">
           <div class="alloc-footer-label">Total Portfolio Value</div>
@@ -653,18 +667,18 @@ tbody tr:hover td { background: var(--hover); }
         <div class="method-section method-full">
           <h3>Structural Limitations</h3>
           <ul style="columns:2;column-gap:32px;column-rule:1px solid var(--border);">
-            <li><strong>Recovery curves are modeled:</strong> The drawdown phase uses a cubic Hermite (S-curve) and recovery uses a square-root curve. Actual paths were irregular and non-monotonic — this is an approximation.</li>
+            <li><strong>Recovery curves are modeled:</strong> The drawdown phase uses a cubic Hermite (S-curve). In the recovery, an asset that rose keeps its gain, and an asset that fell regains ground at the same pace of growth the S&amp;P 500 showed from its own trough, stopping once it is back to where it started. So a mix that fell less than the S&amp;P recovers sooner, and one that fell further takes longer — a 2008 REIT, down 68% against the S&amp;P's 57%, is still short when the S&amp;P has recovered and finishes on the post-recovery growth assumption below. Actual paths were irregular and non-monotonic — this is an approximation.</li>
             <li><strong>Dividends (user-selectable):</strong> Toggle total return including dividends via the <em>Income</em> control. Yields are era-specific: Large Cap ranged from ~5.5% in 1937–38 to ~1.5% in 2001–02; Bonds from ~2% (WWII era) to ~13% at the 1981–82 Volcker peak; REIT 9–10% in the 1980s to ~4.5% in 2020; CDs accrue each era's average 3-month T-bill rate (near zero in the 1930s–40s, ~12% at the Volcker peak), so CD interest appears only in +Dividends mode while principal stays flat. Cash &amp; Savings accrues the same way at a high-yield savings rate — a little under the CD rate, and capped at the Regulation Q ceiling before 1986 — so a cash holding is flat in Price Ret. mode and earns interest only in +Dividends. Each month's income is the era yield applied to that asset's <em>current</em> balance and held as cash, not reinvested — so a position that has fallen 80% pays income on the reduced balance, not on its pre-crash value. Because the yield itself is held constant, income is understated in severe crashes (real yields rose as prices collapsed) and the figure should be read as a conservative floor.</li>
-            <li><strong>No rebalancing assumed:</strong> Allocation percentages are held fixed throughout each simulation. Systematic rebalancing during a drawdown typically improves long-term results.</li>
-            <li><strong>Nominal vs. real (user-selectable):</strong> Toggle inflation-adjusted values via the <em>Returns</em> control. Real mode deflates each path point by the recession's average CPI. Notable: 1980 (~13.5% CPI), 1973–75 (~9.2%), 1981–82 (~9.4%) — real losses were substantially worse than nominal. The Great Depression used –6.0% (deflation), meaning nominal losses slightly overstated real purchasing-power losses. Deflation is applied only through the downturn phase — the 1929–33 price decline did not persist through the multi-decade recovery, so it is not extrapolated past the trough.</li>
-            <li><strong>Post-recovery growth assumption:</strong> Real mode keeps running after the nominal recovery window closes, because purchasing power can stay below baseline long after the nominal price level is restored. That extension assumes <strong>7% nominal growth per year</strong> and long-run inflation normalising to <strong>3%</strong>. Both are assumptions, not data, and they set how long Real mode reports a recovery taking — the 1973–75 real recovery is roughly five times the nominal figure largely because of them.</li>
+            <li><strong>Rebalancing (user-selectable):</strong> With <em>None</em>, nothing is traded: winners and losers drift, so a crash leaves a different mix than you started with. <em>Annual</em> restores your target weights every 12 months — including topping the Cash &amp; Savings bucket back up, which means selling some of what held up to refill it.</li>
+            <li><strong>Nominal vs. real (user-selectable):</strong> Toggle inflation-adjusted values via the <em>Returns</em> control. Real mode deflates each path point by the recession's average CPI. Notable: 1980 (~13.5% CPI), 1973–75 (~9.2%), 1981–82 (~9.4%) — real losses were substantially worse than nominal. The Great Depression used –6.0% (deflation), meaning nominal losses slightly overstated real purchasing-power losses. Deflation is applied only through the downturn phase — the 1929–33 price decline did not persist through the multi-decade recovery, so it is not extrapolated past the trough. When <em>grow with inflation</em> is ticked, monthly costs follow this same price level, so they rise and fall exactly as the Real-mode deflator does.</li>
+            <li><strong>Post-recovery growth assumption:</strong> Once the S&amp;P 500's own recovery window closes, every asset with a market price is assumed to grow at <strong>7% nominal per year</strong> (cash, CDs and anything else whose price never moved stay flat and earn only their interest), with long-run inflation normalising to <strong>3%</strong>. That carries anything that fell further than the S&amp;P back to its start, and in Real mode it covers the stretch where purchasing power stays below baseline long after prices have recovered. Both rates are assumptions, not data, and they set how long those recoveries are reported to take — the 1973–75 real recovery takes more than five times as long as the nominal one largely because of them.</li>
             <li><strong>Assets that did not exist yet:</strong> An asset with no market in a given era (crypto before Jan 2009) is held flat at its notional value for that simulation rather than being dropped. It contributes no return, no yield and no inflation exposure, so it neither helps nor hurts — but it does dilute the rest of the portfolio, exactly as an equivalent cash holding would.</li>
-            <li><strong>Withdrawal order:</strong> Withdrawals are taken in tiers rather than pro rata across everything, because the order is what an emergency fund is for. The <em>Emergency fund</em> is spent first and sits outside the portfolio entirely — it is excluded from the allocation, from every percentage and from the Total Portfolio Value, so it neither dilutes your weights nor flatters the reported drawdown. The Cash &amp; Savings bucket goes next, since spending it realises no loss. Only then is the remainder sold pro rata, dividend cash before principal within each asset. The month the fund runs out is reported per recession: that is the month the portfolio starts absorbing the withdrawal. Real behaviour is messier — people cut spending in a downturn, and this models a fixed draw that never adapts.</li>
+            <li><strong>Monthly costs and the emergency fund:</strong> Costs are paid every month through the downturn and the recovery, in tiers rather than pro rata across everything, because the order is what an emergency fund is for. The <em>Emergency fund</em> is entered in months of those costs and its dollar value is months × today's costs. It is spent first and sits outside the portfolio entirely — excluded from the allocation, every percentage and the Total Portfolio Value — so it neither dilutes your weights nor flatters the reported drawdown. It is held as plain cash and earns nothing in this model. The Cash &amp; Savings bucket goes next, since spending it realises no loss. Only then is the remainder sold pro rata, dividend cash before principal within each asset. The month the fund runs out is reported per recession: that is the month the portfolio starts paying your costs. Real behaviour is messier — people cut spending in a downturn, and this models a fixed cost that never adapts.</li>
             <li><strong>Correlation simplification:</strong> Portfolio drawdown is the allocation-weighted average of individual asset class returns. Cross-asset contagion (e.g., 2008, when all risk asset correlations spiked to near-1) is not modeled.</li>
             <li><strong>One trough per recession:</strong> Each recession uses a single peak-to-trough figure. Multi-leg bear markets (e.g., the Dot-com bust had two distinct legs in 2001 and 2002) are collapsed to their aggregate drawdown.</li>
           </ul>
           <div class="method-warn">
-            <strong>Not financial advice.</strong> This tool is for educational illustration only. Historical drawdowns varied significantly by sector, geography, and individual security. Your actual portfolio behavior in a recession will differ based on factors not modeled here: taxes, fees, margin calls, sequence-of-returns risk, and behavioral decisions made under stress.
+            <strong>Not financial advice.</strong> This tool is for educational illustration only. Historical drawdowns varied significantly by sector, geography, and individual security. Your actual portfolio behavior in a recession will differ based on factors not modeled here: taxes, fees, margin calls, spending that adapts to the market, and behavioral decisions made under stress.
           </div>
         </div>
       </div>
@@ -730,13 +744,13 @@ const RECESSIONS = [
   { id:'depression', name:'Great Depression', period:'1929–1933', color:'#ef4444',
     dur:43, rec:264, spx:-86, q:'verified', inf:-6.0,
     note:'The DJIA/S&P fell ~86% from peak to trough. Bloomberg verified. Recovery to pre-crash nominal levels took until 1954.',
-    d:{ largeCap:-86,midCap:-88,smallCap:-89,emerging:-86,developed:-86,bonds:20,cds:0,reit:-80,crypto:0,goldSilver:0,cash:8 },
+    d:{ largeCap:-86,midCap:-88,smallCap:-89,emerging:-86,developed:-86,bonds:20,cds:0,reit:-80,crypto:0,goldSilver:0,cash:0 },
     dy:{ largeCap:5.0,midCap:4.5,smallCap:4.5,emerging:4.0,developed:4.0,bonds:4.0,cds:2.0,reit:5.0,crypto:0,goldSilver:0,cash:1.5 } },
 
   { id:'r1937', name:'1937–38 Recession', period:'1937–1938', color:'#f97316',
     dur:13, rec:60, spx:-54.5, q:'verified', inf:3.5,
     note:'Bloomberg verified: –54.5% peak Mar 1937 to trough Mar 1938. Caused by premature Fed tightening after only a partial Depression recovery — a cautionary tale about withdrawing stimulus too soon.',
-    d:{ largeCap:-54.5,midCap:-58,smallCap:-60,emerging:-54.5,developed:-54.5,bonds:3,cds:0,reit:-50,crypto:0,goldSilver:0,cash:2 },
+    d:{ largeCap:-54.5,midCap:-58,smallCap:-60,emerging:-54.5,developed:-54.5,bonds:3,cds:0,reit:-50,crypto:0,goldSilver:0,cash:0 },
     dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:2.5,cds:0.3,reit:5.0,crypto:0,goldSilver:0,cash:0.3 } },
 
   { id:'r1945', name:'1945 Recession', period:'1945', color:'#22c55e',
@@ -749,25 +763,25 @@ const RECESSIONS = [
   { id:'r1948', name:'1948–49 Recession', period:'1948–1949', color:'#84cc16',
     dur:11, rec:10, spx:-14, q:'proxy', inf:3.0,
     note:'The NBER recession window (Nov 1948–Oct 1949) saw ~–14% in equities. The often-cited –29.6% figure measures from the May 1946 post-war peak — a much longer window. Post-war economic normalization after wartime stimulus ended.',
-    d:{ largeCap:-14,midCap:-16,smallCap:-18,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
+    d:{ largeCap:-14,midCap:-16,smallCap:-18,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:0 },
     dy:{ largeCap:6.0,midCap:5.5,smallCap:5.5,emerging:5.0,developed:5.0,bonds:2.5,cds:1.1,reit:5.0,crypto:0,goldSilver:0,cash:1.0 } },
 
   { id:'r1953', name:'1953–54 Recession', period:'1953–1954', color:'#10b981',
     dur:10, rec:12, spx:-14, q:'proxy', inf:0.4,
     note:'Did not reach the –20% bear market threshold. A mild ~–14% decline driven by post-Korean War defense spending cuts and inventory correction. One of the mildest recessions in modern history.',
-    d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
+    d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:3,cds:0,reit:-12,crypto:0,goldSilver:0,cash:0 },
     dy:{ largeCap:5.5,midCap:5.0,smallCap:5.0,emerging:4.5,developed:4.5,bonds:3.0,cds:1.5,reit:5.5,crypto:0,goldSilver:0,cash:1.4 } },
 
   { id:'r1957', name:'1957–58 Recession', period:'1957–1958', color:'#14b8a6',
     dur:3, rec:9, spx:-20.7, q:'verified', inf:2.9,
     note:'Bloomberg verified: –20.7% peak Jul 1957 to trough Oct 1957. Eisenhower-era Fed tightening to fight inflation, combined with a drop in auto sales and a brief Sputnik-era economic shock.',
-    d:{ largeCap:-20.7,midCap:-23,smallCap:-26,emerging:-20.7,developed:-20.7,bonds:4,cds:0,reit:-18,crypto:0,goldSilver:0,cash:1 },
+    d:{ largeCap:-20.7,midCap:-23,smallCap:-26,emerging:-20.7,developed:-20.7,bonds:4,cds:0,reit:-18,crypto:0,goldSilver:0,cash:0 },
     dy:{ largeCap:4.0,midCap:3.5,smallCap:3.5,emerging:3.5,developed:3.5,bonds:3.5,cds:3.3,reit:5.5,crypto:0,goldSilver:0,cash:3.0 } },
 
   { id:'r1960', name:'1960–61 Recession', period:'1960–1961', color:'#06b6d4',
     dur:10, rec:11, spx:-14, q:'proxy', inf:1.4,
     note:'Did not reach –20% bear market threshold. A brief Kennedy-era recession caused by tight monetary policy and a balance-of-payments deficit. The economy recovered quickly under the Kennedy stimulus program.',
-    d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:4,cds:0,reit:-12,crypto:0,goldSilver:0,cash:1 },
+    d:{ largeCap:-14,midCap:-15,smallCap:-17,emerging:-14,developed:-14,bonds:4,cds:0,reit:-12,crypto:0,goldSilver:0,cash:0 },
     dy:{ largeCap:3.0,midCap:2.5,smallCap:2.5,emerging:3.0,developed:3.0,bonds:4.0,cds:2.5,reit:6.0,crypto:0,goldSilver:0,cash:2.4 } },
 
   { id:'r1969', name:'1969–70 Recession', period:'1969–1970', color:'#3b82f6',
@@ -798,32 +812,36 @@ const RECESSIONS = [
   { id:'r1990', name:'Gulf War Recession', period:'1990–1991', color:'#ec4899',
     dur:8, rec:4, spx:-20, q:'proxy', inf:4.6,
     note:'~–20% peak-to-trough (Jul–Oct 1990). The Savings & Loan crisis devastated REITs and commercial real estate. Oil price spike from the Gulf War rattled consumer confidence. A relatively quick recovery once the war ended and oil prices normalized.',
-    d:{ largeCap:-20,midCap:-24,smallCap:-30,emerging:-25,developed:-22,bonds:9,cds:0,reit:-28,crypto:0,goldSilver:-5,cash:1 },
+    d:{ largeCap:-20,midCap:-24,smallCap:-30,emerging:-25,developed:-22,bonds:9,cds:0,reit:-28,crypto:0,goldSilver:-5,cash:0 },
     dy:{ largeCap:3.5,midCap:3.0,smallCap:3.0,emerging:3.5,developed:3.5,bonds:8.5,cds:7.5,reit:7.5,crypto:0,goldSilver:0,cash:7.0 } },
 
   { id:'r2001', name:'Dot-com Bust', period:'2001–2002', color:'#f43f5e',
     dur:31, rec:56, spx:-49.1, q:'verified', inf:2.8,
     note:'Bloomberg verified: –49.1% peak Mar 2000 to trough Oct 2002. The NASDAQ fell nearly 80%. REITs (+15%) and bonds (+12%) were standout safe havens as investors fled growth stocks. Gold began a multi-year bull run. Compounded by 9/11 and corporate accounting scandals.',
-    d:{ largeCap:-49.1,midCap:-42,smallCap:-35,emerging:-30,developed:-45,bonds:12,cds:0,reit:15,crypto:0,goldSilver:10,cash:2 },
+    d:{ largeCap:-49.1,midCap:-42,smallCap:-35,emerging:-30,developed:-45,bonds:12,cds:0,reit:15,crypto:0,goldSilver:10,cash:0 },
     dy:{ largeCap:1.5,midCap:1.2,smallCap:1.2,emerging:2.0,developed:2.0,bonds:5.5,cds:3.5,reit:7.0,crypto:0,goldSilver:0,cash:3.0 } },
 
   { id:'r2008', name:'Great Recession', period:'2007–2009', color:'#fb923c',
     dur:17, rec:48, spx:-56.8, q:'verified', inf:2.5,
     note:'Bloomberg verified: –56.8% peak Oct 2007 to trough Mar 2009. The housing and credit crisis spread globally. REITs collapsed –68%. Emerging markets fell even harder than the US. Gold (+25%) and US Treasuries provided the only meaningful cushion.',
-    d:{ largeCap:-56.8,midCap:-60,smallCap:-60,emerging:-65,developed:-58,bonds:5,cds:0,reit:-68,crypto:0,goldSilver:25,cash:2 },
+    d:{ largeCap:-56.8,midCap:-60,smallCap:-60,emerging:-65,developed:-58,bonds:5,cds:0,reit:-68,crypto:0,goldSilver:25,cash:0 },
     dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:4.5,cds:2.0,reit:5.0,crypto:0,goldSilver:0,cash:1.8 } },
 
   { id:'r2020', name:'COVID-19 Crash', period:'2020', color:'#64748b',
     dur:1, rec:5, spx:-33.9, q:'verified', inf:1.2,
     note:'Bloomberg verified: –33.9% peak Feb 2020 to trough Mar 2020 — the fastest bear market on record at just 33 days. Also the fastest recovery in history. Crypto fell –50% initially, then surged to new highs. Massive fiscal and monetary stimulus drove the rapid rebound.',
-    d:{ largeCap:-33.9,midCap:-40,smallCap:-42,emerging:-32,developed:-33.9,bonds:8,cds:0,reit:-42,crypto:-50,goldSilver:12,cash:1 },
+    d:{ largeCap:-33.9,midCap:-40,smallCap:-42,emerging:-32,developed:-33.9,bonds:8,cds:0,reit:-42,crypto:-50,goldSilver:12,cash:0 },
     dy:{ largeCap:2.0,midCap:1.5,smallCap:1.5,emerging:2.5,developed:2.5,bonds:2.0,cds:0.5,reit:4.5,crypto:0,goldSilver:0,cash:0.5 } },
 ];
 
 // ─── State ────────────────────────────────────────────
 let selected = new Set(), chartMode = 'absolute', realMode = false, divMode = false, logScale = false;
 let withdrawAmt = 0, withdrawInflate = true, rebalanceOn = false, benchOn = false;
-let emergencyFund = 0;
+// The emergency fund is held as MONTHS of costs — the way people actually size one —
+// and its dollar value is always derived, so the two can never disagree. With no
+// costs set it is worth $0 whatever the months say.
+let efMonths = 0;
+function efDollars(){ return efMonths * withdrawAmt; }
 let mainCh = null, assetCh = null, donutCh = null;
 
 // ─── Theme ────────────────────────────────────────────
@@ -930,26 +948,54 @@ function deflator(r, m, nomEnd) {
 // Price multiplier for one asset at month m, relative to its starting value.
 // Splitting this out lets the walk below advance balances by a monthly return, which
 // is what makes withdrawals and rebalancing expressible at all.
+//
+// Recovery used to drag every asset back to exactly 1.0 at nomEnd, so every mix
+// recovered on the S&P's clock whatever it held, and anything that had RISEN was
+// forced back down. Now:
+//   - an asset that rose (or held) keeps its level through the recovery window;
+//   - an asset that fell regains at the S&P's own pace of growth from the trough,
+//     (1+dk) × S(m)/S(dur), stopping once it is back to its start — so a shallow
+//     loser recovers sooner than the S&P and a deeper one is still short at nomEnd;
+//   - past nomEnd, anything still short keeps growing at POST_RECOVERY_GROWTH until
+//     it is back, and every asset with a market price grows at that rate once it is;
+//   - an asset whose price never moved (d = 0: cash, CDs, pegged gold) stays flat.
+// A 100% S&P book (dk = spx) reproduces the original curve exactly.
+// When the S&P itself rose (1945) there is no S&P rally to borrow a pace from, so a
+// loser there keeps the original square-root path back to its start.
 function shapeAt(r, k, m, nomEnd) {
   if (!existed(r, k)) return 1;
   const dk = (r.d[k] ?? 0) / 100;
   if (m <= r.dur) { const e = r.dur === 0 ? 1 : m/r.dur; return 1 + dk*(e*e*(3 - 2*e)); }
-  if (m <= nomEnd) return (1 + dk) + (-dk)*Math.sqrt((m - r.dur)/r.rec);
-  return Math.pow(1 + POST_RECOVERY_GROWTH/100, (m - nomEnd)/12);
+  // An asset whose price did not move at all (cash, CDs, pegged gold) is principal-flat:
+  // its return is its yield, so the equity-style growth assumption must not lift it.
+  if (dk === 0) return 1;
+  if (dk > 0) return (1 + dk) * postGrowth(m, nomEnd);
+  return recoveryLevel(r, dk, Math.min(m, nomEnd)) * postGrowth(m, nomEnd);
+}
+function postGrowth(m, nomEnd) {
+  return m <= nomEnd ? 1 : Math.pow(1 + POST_RECOVERY_GROWTH/100, (m - nomEnd)/12);
+}
+// A losing asset's level at month m of the recovery window (dur < m <= nomEnd).
+function recoveryLevel(r, dk, m) {
+  const t = r.rec === 0 ? 1 : Math.min(1, (m - r.dur)/r.rec);
+  if (r.spx >= 0) return (1 + dk) + (-dk)*Math.sqrt(t);
+  const spx = r.spx/100, S = (1 + spx) + (-spx)*Math.sqrt(t);
+  return Math.min(1, (1 + dk) * S/(1 + spx));
 }
 
 // Walks one recession month by month carrying a balance per asset class.
-// With no withdrawal and no rebalancing the summed curves reproduce the original
-// portfolio-level curve exactly (verify.js asserts this point by point).
+// A 100% S&P book with no withdrawal and no rebalancing reproduces the original
+// S&P curve exactly (verify.js asserts this point by point).
 function simulate(r, o) {
   const alloc = o.alloc || ALLOC, real = !!o.real, divs = !!o.divs;
   const draw = Math.max(0, o.withdraw || 0), drawInf = !!o.drawInflate, reb = !!o.rebalance;
   const keys = Object.keys(alloc);
   const start = keys.reduce((s,k) => s + alloc[k].value, 0);
   const nomEnd = r.dur + r.rec;
-  // Real mode runs past the nominal window: purchasing power can stay below baseline
-  // long after the nominal price level has recovered.
-  const limit = real ? nomEnd + 180 : nomEnd;
+  // Both modes run past the S&P's recovery window: an asset that fell further than the
+  // S&P is still short of its start when that window closes, and in Real mode
+  // purchasing power can stay below baseline long after prices have recovered.
+  const limit = nomEnd + 180;
 
   // bal = invested balance; cash = dividends received but not reinvested. Kept apart
   // because returns apply to one and not the other, and per asset so that the
@@ -987,12 +1033,17 @@ function simulate(r, o) {
       //   2. the Cash & Savings bucket, which can be spent without realising a loss
       //   3. everything else, pro rata (and within each asset, its dividend cash first)
       if (draw > 0) {
-        let need = drawInf ? draw * Math.pow(1 + r.inf/100, m/12) : draw;
+        // Costs follow the same price level Real mode deflates by. Compounding r.inf
+        // here instead ran a second, contradictory price model: it kept 1930s deflation
+        // going for 25 years (a $5,000 bill fell to ~$1,000) and kept 1980's 13.5%
+        // going long after deflator() had normalised to LONG_RUN_INFLATION.
+        let need = drawInf ? draw * deflator(r, m, nomEnd) : draw;
 
         // Tier 1 — the emergency fund. While it lasts the portfolio is untouched.
         const fromEF = Math.min(ef, need);
         ef -= fromEF; need -= fromEF;
-        if (efStart > 0 && ef <= 0 && efDepletedAt === null) efDepletedAt = m;
+        if (ef < 0.005) ef = 0;  // float dust must not count as a month of cover
+        if (efStart > 0 && ef === 0 && efDepletedAt === null) efDepletedAt = m;
 
         // Tier 2 — the cash bucket, dividend cash on it first, then the balance.
         if (need > 0 && bal.cash !== undefined) {
@@ -1007,10 +1058,13 @@ function simulate(r, o) {
           const pos = keys.map(k => bal[k] + cash[k]);
           const avail = pos.reduce((a,b) => a+b, 0);
           if (need >= avail) {
-            need = avail;
+            // Everything goes. Zeroed outright: selling pro rata leaves float dust
+            // behind, which put the reported low a month after the reported run-out.
+            keys.forEach(k => { bal[k] = 0; cash[k] = 0; });
+            need = 0;
             if (depletedAt === null) depletedAt = m;
           }
-          if (avail > 0) keys.forEach((k,i) => {
+          if (need > 0 && avail > 0) keys.forEach((k,i) => {
             let share = need * (pos[i]/avail);
             const fromCash = Math.min(cash[k], share);
             cash[k] -= fromCash; share -= fromCash;
@@ -1028,7 +1082,9 @@ function simulate(r, o) {
       sum += v;
     }
     total.push(sum);
-    if (real && m > nomEnd && sum >= start - Math.max(0.01, start*1e-9)) break; // real purchasing power restored
+    // Past the S&P's window, stop once the portfolio is back to its start (or has
+    // nothing left to recover with) rather than modelling 15 more years of growth.
+    if (m >= nomEnd && (sum >= start - Math.max(0.01, start*1e-9) || depletedAt !== null)) break;
   }
   return { total, byAsset, start, nomEnd, depletedAt, efStart, efLeft: ef, efDepletedAt };
 }
@@ -1038,14 +1094,14 @@ let simCache = new Map(), simCacheKey = '';
 function simOpts() {
   return { real:realMode, divs:divMode, withdraw:withdrawAmt,
            drawInflate:withdrawInflate, rebalance:rebalanceOn,
-           emergencyFund:emergencyFund };
+           emergencyFund:efDollars() };
 }
 function sim(r) {
-  // emergencyFund belongs in the key: leaving it out would serve a stale simulation
+  // efMonths belongs in the key: leaving it out would serve a stale simulation
   // and the chart would sit still while the user typed into the field.
   const key = Object.entries(ALLOC).map(([k,a]) => k+':'+a.value).join(',')
             + '|' + [realMode, divMode, withdrawAmt, withdrawInflate, rebalanceOn,
-                     emergencyFund].join('|');
+                     efMonths].join('|');
   if (key !== simCacheKey) { simCache = new Map(); simCacheKey = key; }
   if (!simCache.has(r.id)) simCache.set(r.id, simulate(r, simOpts()));
   return simCache.get(r.id);
@@ -1072,14 +1128,21 @@ function benchPath(r, mode) {
 }
 
 // ─── Derived figures ──────────────────────────────────
-// Month of the largest deviation from the starting value within the downturn window.
-// Dividends and deflation shift the true extreme off month r.dur, so scan for it.
+// Month of the largest deviation from the starting value. Dividends and deflation
+// shift the true extreme off month r.dur, so scan for it.
+// The low is taken over the recession AND the S&P's recovery window: costs paid
+// through the recovery, or inflation eroding a cash-heavy book in Real mode, can push
+// the low well past the downturn (Dot-com at $4k/mo: month 87, not 31), and the
+// downturn-only low understated the loss. It stops at nomEnd because past it the path
+// runs on assumed growth (POST_RECOVERY_GROWTH) rather than data — whether that
+// assumption outruns your costs is reported separately, as the month the money runs
+// out, not folded into the recession's drawdown. The high stays within the downturn.
 // Takes a simulation rather than a recession so the S&P overlay, which runs its own,
 // shares this definition instead of carrying a second copy of it.
 function extremeOf(s, dur) {
-  const win = s.total.slice(0, dur + 1);
-  const mn = Math.min(...win), mx = Math.max(...win);
-  return win.indexOf((s.start - mn) >= (mx - s.start) ? mn : mx);
+  const win = s.total.slice(0, dur + 1), lowWin = s.total.slice(0, s.nomEnd + 1);
+  const mn = Math.min(...lowWin), mx = Math.max(...win);
+  return (s.start - mn) >= (mx - s.start) ? lowWin.indexOf(mn) : win.indexOf(mx);
 }
 function extremeIndex(r) { return extremeOf(sim(r), r.dur); }
 function pathExtreme(r) { return sim(r).total[extremeIndex(r)]; }
@@ -1107,20 +1170,27 @@ function benchDrawdown(r) {
 
 // Months from the extreme back to the starting value on the current basis, so the
 // printed figure matches where the drawn line actually returns to baseline.
-// null when it never recovers inside the modelled window.
+// null when there is nothing to recover from (see neverFell) or when it never
+// recovers inside the modelled window.
 function recoveryMonths(r) {
   const s = sim(r), from = extremeIndex(r), eps = Math.max(0.01, s.start * 1e-9);
+  if (neverFell(r)) return null;
   for (let m = from; m < s.total.length; m++) if (s.total[m] >= s.start - eps) return m - from;
   return null;
+}
+// 1945 rose throughout. It used to report "0 mo" to recover, which reads as a figure
+// and means nothing; there was simply no loss to recover.
+function neverFell(r) { const s = sim(r); return s.total[extremeIndex(r)] >= s.start; }
+function recoveryLabel(r) {
+  return neverFell(r) ? 'never fell below start' : fmtRec(recoveryMonths(r));
 }
 
 // Last month the chart should draw. recoveryMonths above already answers "when is this
 // back to where it started" — but nothing ever asked it, so a path that regained its
 // baseline before the modelled window closed carried on climbing: the Great Depression
 // in Real +Dividends drew 224 months past recovery and finished at 2.3x its start.
-// Deliberately NOT recoveryMonths for a path that never dipped — 1945 rose throughout
-// and reports "0 months to normalise", which as a cut would leave a single point. That
-// case and a path that never regains baseline both draw in full.
+// A path that never dipped (1945) has no recovery to cut at, and a path that never
+// regains baseline has no crossing; both draw in full.
 function endOfPath(s, dur) {
   const last = s.total.length - 1, ex = extremeOf(s, dur);
   if (s.total[ex] >= s.start) return last;      // never dipped below baseline
@@ -1175,8 +1245,8 @@ function renderDetailPanel(r) {
     <div class="panel-title" style="color:${r.color};margin-bottom:10px;">${r.name}</div>
     <p>${r.note}</p>
     <div class="detail-pills">
-      <span class="detail-pill">Downturn: <strong>${extremeIndex(r)} mo</strong></span>
-      <span class="detail-pill">${r.spx>0?'Normalize':'Recovery'}: <strong>${fmtRec(recoveryMonths(r))}</strong></span>
+      <span class="detail-pill">${neverFell(r)?'To peak':'To low'}: <strong>${extremeIndex(r)} mo</strong></span>
+      <span class="detail-pill">Recovery: <strong>${recoveryLabel(r)}</strong></span>
       <span class="detail-pill">S&amp;P 500: <strong style="color:${r.spx>0?'var(--green)':'var(--red)'}">${r.spx>0?'+':''}${r.spx}%</strong></span>
     </div>
   </div>`;
@@ -1219,7 +1289,8 @@ function renderMainChart() {
     borderColor:C.baseline, borderWidth:1, borderDash:[5,5], pointRadius:0, fill:false });
 
   const modeTag=[realMode?'Real':'',divMode?'+Div':'',rebalanceOn?'Rebal':'',
-    withdrawAmt>0?'−$'+Math.round(withdrawAmt).toLocaleString()+'/mo':'',
+    withdrawAmt>0?'$'+Math.round(withdrawAmt).toLocaleString()+'/mo costs':'',
+    withdrawAmt>0&&efMonths>0?(Math.round(efMonths*10)/10)+'-mo fund':'',
     benchOn&&recs.length!==1?'benchmark needs a single recession':''].filter(Boolean).join(' · ');
   canvas.setAttribute('aria-label',
     'Line chart, portfolio value through ' + recs.map(r=>r.name).join(', ')
@@ -1267,6 +1338,24 @@ function renderMainChart() {
 
 // ─── Metrics ──────────────────────────────────────────
 const qLabel={verified:'✓ Verified — Winthrop/Bloomberg data',proxy:'~ Proxy estimate'};
+// "+0.0 pts better" read as nonsense when both lines bottomed at the same place (e.g.
+// both emptied by costs), so a gap that rounds to zero is called level and left uncoloured.
+const edgeLevel = e => Math.abs(e) < 0.05;
+const edgeCls = (e, pos, neg) => edgeLevel(e) ? '' : e > 0 ? pos : neg;
+const fmtEdge = (e, long) => edgeLevel(e) ? (long ? 'level with it' : '0.0 pts')
+  : (e > 0 ? '+' : '') + e.toFixed(1) + ' pts' + (long ? (e > 0 ? ' better' : ' worse') : '');
+const fmtMo = x => Math.round(x*10)/10;
+// The caption promises "N months at today's costs". When costs grow with inflation the
+// fund runs out sooner than that (and later under 1930s deflation), so the card's month
+// would look like it contradicts the caption — say why, in one sentence, when it does.
+// Without that change in costs, an N-month fund runs out in month ceil(N): it covers
+// months 1..N and part of the next.
+function efExplain(efGone){
+  const expected = Math.ceil(efMonths - 1e-9), n = fmtMo(efMonths);
+  if (efGone === null) return `A ${n}-month fund covered every month modelled, so the portfolio was never sold to pay costs.`;
+  if (efGone === expected) return '';
+  return `Your costs ${efGone < expected ? 'rose with inflation' : 'fell with deflation'}, so a ${n}-month fund ran out in month ${efGone} rather than month ${expected}.`;
+}
 function renderMetrics(recs) {
   const t=tot();
   const grid=document.getElementById('metricsGrid');
@@ -1301,21 +1390,20 @@ function renderMetrics(recs) {
           <span class="mrow-value">$${Math.round(t+impact).toLocaleString()}</span></div>
         <div class="mrow"><span class="mrow-label">Months to ${isPos?'peak':'trough'}</span>
           <span class="mrow-value">${extremeIndex(r)} mo</span></div>
-        <div class="mrow"><span class="mrow-label">Recovery / normalize</span>
-          <span class="mrow-value">${fmtRec(recoveryMonths(r))}</span></div>
+        <div class="mrow"><span class="mrow-label">Recovery</span>
+          <span class="mrow-value">${recoveryLabel(r)}</span></div>
         <div class="mrow"><span class="mrow-label">S&amp;P 500 (headline)</span>
           <span class="mrow-value ${r.spx>0?'grn':'red'}">${r.spx>0?'+':''}${r.spx}%</span></div>
         <div class="mrow"><span class="mrow-label">S&amp;P 500, same basis</span>
           <span class="mrow-value ${bench>=0?'grn':'red'}">${bench>=0?'+':''}${bench.toFixed(1)}%</span></div>
         <div class="mrow"><span class="mrow-label">Your mix vs that</span>
-          <span class="mrow-value ${edge>=0?'grn':'red'}">${edge>=0?'+':''}${edge.toFixed(1)} pts${edge>=0?' better':' worse'}</span></div>
+          <span class="mrow-value ${edgeCls(edge,'grn','red')}">${fmtEdge(edge,true)}</span></div>
         ${s.efStart>0?`
-        <div class="mrow"><span class="mrow-label">Emergency fund lasted</span>
-          <span class="mrow-value">${efGone===null
-            ? 'the whole window'
-            : efGone + ' mo'}</span></div>`:''}
+        <div class="mrow"><span class="mrow-label">Emergency fund ran out</span>
+          <span class="mrow-value">${efGone===null ? 'never' : 'month ' + efGone}</span></div>`:''}
       </div>
-      ${dep!==null?`<div class="deplete-warn">Portfolio exhausted at month ${dep} — the withdrawal outlasted the recovery.</div>`:''}
+      ${s.efStart>0&&efExplain(efGone)?`<div class="metric-note">${efExplain(efGone)}</div>`:''}
+      ${dep!==null?`<div class="deplete-warn">Portfolio ran out of money in month ${dep} — your costs used it up before it could recover.</div>`:''}
       ${best&&worst&&best!==worst?`
       <div class="metric-divider"></div>
       <div class="metric-rows">
@@ -1381,7 +1469,7 @@ function renderTable(recs) {
     const troughVal=pathExtreme(r);
     const d=t>0?((troughVal/t)-1)*100:0,impact=troughVal-t,isPos=d>=0;
     const edge=d-benchDrawdown(r);   // positive = your mix held up better
-    const rec=fmtRec(recoveryMonths(r));
+    const rec=recoveryLabel(r);
     return `<tr>
       <td><div class="cell-rec"><div class="cell-dot" style="background:${r.color}"></div>${r.name}</div></td>
       <td class="cell-muted">${r.period}</td>
@@ -1390,7 +1478,7 @@ function renderTable(recs) {
       <td class="${isPos?'cell-pos':'cell-neg'}">${isPos?'+':'–'}$${Math.abs(Math.round(impact)).toLocaleString()}</td>
       <td>${rec}</td>
       <td class="${r.spx>0?'cell-pos':'cell-neg'}">${r.spx>0?'+':''}${r.spx}%</td>
-      <td class="${edge>=0?'cell-pos':'cell-neg'}">${edge>=0?'+':''}${edge.toFixed(1)} pts</td>
+      <td class="${edgeCls(edge,'cell-pos','cell-neg')}">${fmtEdge(edge,false)}</td>
     </tr>`;
   }).join('');
 }
@@ -1477,26 +1565,25 @@ function syncControls(){
   });
   document.getElementById('withdrawInput').value = withdrawAmt || 0;
   document.getElementById('withdrawInflate').checked = withdrawInflate;
-  document.getElementById('emergencyInput').value = emergencyFund || 0;
+  document.getElementById('emergencyInput').value = efMonths || 0;
   renderEmergencyNote();
   syncLogAvailability();
 }
-function onWithdraw(v){ withdrawAmt=Math.max(0,parseFloat(v)||0); scheduleRedraw(); }
-function onEmergencyFund(v){ emergencyFund=Math.max(0,parseFloat(v)||0); scheduleRedraw(); }
-// How many months of the current withdrawal the fund covers. Independent of any
-// recession — it is arithmetic on the inputs, so it reads the same with none selected.
-// Inflation-grown withdrawals are not compounded here; the figure is a plain ratio and
-// the simulation is what accounts for the growth.
-function emergencyMonths(){
-  if (emergencyFund <= 0 || withdrawAmt <= 0) return null;
-  return emergencyFund / withdrawAmt;
-}
+// The fund's caption and enabled state depend on costs too, so both handlers update
+// them at once rather than waiting for the debounced redraw.
+function onWithdraw(v){ withdrawAmt=Math.max(0,parseFloat(v)||0); renderEmergencyNote(); scheduleRedraw(); }
+function onEmergencyMonths(v){ efMonths=Math.max(0,parseFloat(v)||0); renderEmergencyNote(); scheduleRedraw(); }
+// The fund is measured in months of costs, so with no costs it has nothing to measure
+// against and does nothing — the input is disabled and says so. Like the benchmark
+// toggle, the months are kept rather than cleared: the setting is inapplicable, not
+// invalid, and comes back as soon as costs are entered.
 function renderEmergencyNote(){
-  const el = document.getElementById('emergencyNote'), mo = emergencyMonths();
-  if (mo === null) { el.innerHTML = emergencyFund > 0
-    ? 'spent before anything is sold' : ''; return; }
-  const rounded = mo >= 10 ? Math.round(mo) : Math.round(mo*10)/10;
-  el.innerHTML = `covers <strong>${rounded} ${rounded === 1 ? 'month' : 'months'}</strong> before selling starts`;
+  const el = document.getElementById('emergencyNote');
+  const input = document.getElementById('emergencyInput');
+  input.disabled = withdrawAmt <= 0;
+  if (withdrawAmt <= 0) { el.innerHTML = 'enter monthly costs first — the fund is measured in months of them'; return; }
+  if (efMonths <= 0) { el.innerHTML = 'none — costs come out of the portfolio from month 1'; return; }
+  el.innerHTML = `= <strong>$${Math.round(efDollars()).toLocaleString()}</strong> at today's costs, spent before anything is sold`;
 }
 function onWithdrawInflate(on){ withdrawInflate=on; refreshAll(); }
 function setRebalance(on){ rebalanceOn=on; syncControls(); refreshAll(); }
@@ -1545,7 +1632,7 @@ function stateToHash(){
     'f=' + FLAGS.map(f => f() ? 1 : 0).join(''),
   ];
   if (withdrawAmt > 0) parts.push('w=' + Math.round(withdrawAmt));
-  if (emergencyFund > 0) parts.push('e=' + Math.round(emergencyFund));
+  if (efMonths > 0) parts.push('em=' + Math.round(efMonths * 100) / 100);
   return parts.join('&');
 }
 // Hand-rolled rather than URLSearchParams so the link stays readable — commas and
@@ -1579,10 +1666,12 @@ function applyHash(){
   }
   const w = parseFloat(p.w);
   withdrawAmt = isFinite(w) && w > 0 ? w : 0;
-  // Absent on every link written before the emergency fund existed, which is the
-  // same as not having one.
-  const e = parseFloat(p.e);
-  emergencyFund = isFinite(e) && e > 0 ? e : 0;
+  // em= is months of costs. Links written while the fund was entered in dollars carry
+  // e= instead; dividing by the same link's costs gives the identical fund. Absent on
+  // links written before the fund existed, which is the same as not having one.
+  const em = parseFloat(p.em), e = parseFloat(p.e);
+  efMonths = isFinite(em) && em > 0 ? em
+           : isFinite(e) && e > 0 && withdrawAmt > 0 ? e / withdrawAmt : 0;
   return true;
 }
 let urlTimer = null;
