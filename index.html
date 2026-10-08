@@ -470,7 +470,8 @@ tbody tr:hover td { background: var(--hover); }
         <dt>Linear / Log</dt><dd>A log axis stops an outlier like the Great Depression flattening every other line into a band. Unavailable in % Change mode, where values cross zero.</dd>
         <dt>Rebalance</dt><dd>Annual sells what held up and buys what fell, once a year, restoring your target weights — the discipline most investors find hardest in a crash.</dd>
         <dt>Benchmark</dt><dd>Overlays the same starting capital held entirely in the S&amp;P 500, on the same basis, so you can see whether diversifying actually helped. One recession at a time — with several selected the control greys out, and the comparison table below the chart carries the same comparison as columns for all of them.</dd>
-        <dt>Monthly costs</dt><dd>What you spend each month that has to come from savings — for example if your income stopped. It is paid every month through the downturn and the recovery. Selling into a drawdown locks in losses the recovery never gives back — the sequence-of-returns problem.</dd>
+        <dt>Monthly costs</dt><dd>What you'd need from savings each month if your income stopped. Selling into a drawdown locks in losses the recovery never gives back — the sequence-of-returns problem.</dd>
+        <dt>Months without income</dt><dd>How long those costs come from savings, starting when the recession starts. After that your income is back, costs stop, and the portfolio is left to recover.</dd>
         <dt>Emergency fund</dt><dd>How many months of those costs you hold as cash <em>outside</em> the portfolio, spent before anything is sold. It is not in your allocation, the donut or the Total Portfolio Value, and it does nothing until monthly costs are set. Raise it and watch the drawdown get shallower — that difference is what the fund is worth. Once it runs out, the Cash &amp; Savings bucket goes next, then everything else pro rata.</dd>
       </dl>
     </details>
@@ -499,11 +500,21 @@ tbody tr:hover td { background: var(--hover); }
               <span class="alloc-prefix">$</span>
               <input class="alloc-input" id="withdrawInput" type="number" min="0" step="500" value="0"
                 oninput="onWithdraw(this.value)"
-                title="What you spend each month that has to come from savings — for example if your income stopped. It is paid every month through the downturn and the recovery, which is the sequence-of-returns question: selling into a drawdown locks in losses a recovering portfolio never gets back.">
+                title="What you spend each month that has to come from savings — for example if your income stopped. It is paid for the months without income, starting when the recession starts, which is the sequence-of-returns question: selling into a drawdown locks in losses a recovering portfolio never gets back.">
             </div>
             <label class="chk"><input type="checkbox" id="withdrawInflate" checked
               onchange="onWithdrawInflate(this.checked)"> grow with inflation</label>
-            <span class="alloc-footer-note">paid from savings, e.g. if your income stopped</span>
+            <span class="alloc-footer-note">what you'd need from savings if your income stopped</span>
+          </div>
+          <div class="ctl-line">
+            <label class="alloc-footer-label" for="gapInput">Months without income</label>
+            <div class="alloc-input-wrap">
+              <input class="alloc-input alloc-input-sm" id="gapInput" type="number" min="0" step="1" value="12"
+                oninput="onGapMonths(this.value)" aria-describedby="gapNote"
+                title="How long your costs have to come from savings, starting when the recession starts. After that your income is back and costs stop.">
+              <span class="alloc-suffix">months</span>
+            </div>
+            <span class="alloc-footer-note" id="gapNote" aria-live="polite"></span>
           </div>
           <div class="ctl-line">
             <label class="alloc-footer-label" for="emergencyInput">Emergency fund</label>
@@ -673,7 +684,7 @@ tbody tr:hover td { background: var(--hover); }
             <li><strong>Nominal vs. real (user-selectable):</strong> Toggle inflation-adjusted values via the <em>Returns</em> control. Real mode deflates each path point by the recession's average CPI. Notable: 1980 (~13.5% CPI), 1973–75 (~9.2%), 1981–82 (~9.4%) — real losses were substantially worse than nominal. The Great Depression used –6.0% (deflation), meaning nominal losses slightly overstated real purchasing-power losses. Deflation is applied only through the downturn phase — the 1929–33 price decline did not persist through the multi-decade recovery, so it is not extrapolated past the trough. When <em>grow with inflation</em> is ticked, monthly costs follow this same price level, so they rise and fall exactly as the Real-mode deflator does.</li>
             <li><strong>Post-recovery growth assumption:</strong> Once the S&amp;P 500's own recovery window closes, every asset with a market price is assumed to grow at <strong>7% nominal per year</strong> (cash, CDs and anything else whose price never moved stay flat and earn only their interest), with long-run inflation normalising to <strong>3%</strong>. That carries anything that fell further than the S&amp;P back to its start, and in Real mode it covers the stretch where purchasing power stays below baseline long after prices have recovered. Both rates are assumptions, not data, and they set how long those recoveries are reported to take — the 1973–75 real recovery takes more than five times as long as the nominal one largely because of them.</li>
             <li><strong>Assets that did not exist yet:</strong> An asset with no market in a given era (crypto before Jan 2009) is held flat at its notional value for that simulation rather than being dropped. It contributes no return, no yield and no inflation exposure, so it neither helps nor hurts — but it does dilute the rest of the portfolio, exactly as an equivalent cash holding would.</li>
-            <li><strong>Monthly costs and the emergency fund:</strong> Costs are paid every month through the downturn and the recovery, in tiers rather than pro rata across everything, because the order is what an emergency fund is for. The <em>Emergency fund</em> is entered in months of those costs and its dollar value is months × today's costs. It is spent first and sits outside the portfolio entirely — excluded from the allocation, every percentage and the Total Portfolio Value — so it neither dilutes your weights nor flatters the reported drawdown. It is held as plain cash and earns nothing in this model. The Cash &amp; Savings bucket goes next, since spending it realises no loss. Only then is the remainder sold pro rata, dividend cash before principal within each asset. The month the fund runs out is reported per recession: that is the month the portfolio starts paying your costs. Real behaviour is messier — people cut spending in a downturn, and this models a fixed cost that never adapts.</li>
+            <li><strong>Monthly costs and the emergency fund:</strong> Costs are paid for the <em>Months without income</em> you set, starting in the recession's first month, and then stop: your income is back. Within that gap they are paid in tiers rather than pro rata across everything, because the order is what an emergency fund is for. The <em>Emergency fund</em> is entered in months of those costs and its dollar value is months × today's costs. It is spent first and sits outside the portfolio entirely — excluded from the allocation, every percentage and the Total Portfolio Value — so it neither dilutes your weights nor flatters the reported drawdown. It is held as plain cash and earns nothing in this model. The Cash &amp; Savings bucket goes next, since spending it realises no loss. Only then is the remainder sold pro rata, dividend cash before principal within each asset. The month the fund runs out is reported per recession: that is the month the portfolio starts paying your costs. Real behaviour is messier — people cut spending in a downturn, and this models a fixed cost that never adapts, and an income gap that starts exactly when the recession does.</li>
             <li><strong>Correlation simplification:</strong> Portfolio drawdown is the allocation-weighted average of individual asset class returns. Cross-asset contagion (e.g., 2008, when all risk asset correlations spiked to near-1) is not modeled.</li>
             <li><strong>One trough per recession:</strong> Each recession uses a single peak-to-trough figure. Multi-leg bear markets (e.g., the Dot-com bust had two distinct legs in 2001 and 2002) are collapsed to their aggregate drawdown.</li>
           </ul>
@@ -842,6 +853,11 @@ let withdrawAmt = 0, withdrawInflate = true, rebalanceOn = false, benchOn = fals
 // costs set it is worth $0 whatever the months say.
 let efMonths = 0;
 function efDollars(){ return efMonths * withdrawAmt; }
+// How long the costs have to come from savings, starting when the recession starts.
+// This is what gives an emergency fund its meaning: it covers the first part of the
+// gap so the portfolio is not sold at the bottom to cover it.
+const DEFAULT_GAP = 12;
+let gapMonths = DEFAULT_GAP;
 let mainCh = null, assetCh = null, donutCh = null;
 
 // ─── Theme ────────────────────────────────────────────
@@ -989,6 +1005,11 @@ function recoveryLevel(r, dk, m) {
 function simulate(r, o) {
   const alloc = o.alloc || ALLOC, real = !!o.real, divs = !!o.divs;
   const draw = Math.max(0, o.withdraw || 0), drawInf = !!o.drawInflate, reb = !!o.rebalance;
+  // Costs are paid for months 1..drawMonths only — the stretch with no income — and
+  // then stop. Paying them for ever turned every line into a 15-year slide to zero
+  // that said nothing about the recession. Left unset (direct engine calls) it is
+  // unlimited; the app always passes the user's gap.
+  const drawMonths = o.drawMonths === undefined ? Infinity : Math.max(0, o.drawMonths);
   const keys = Object.keys(alloc);
   const start = keys.reduce((s,k) => s + alloc[k].value, 0);
   const nomEnd = r.dur + r.rec;
@@ -1032,7 +1053,7 @@ function simulate(r, o) {
       //   1. the emergency fund, which sits outside the portfolio entirely
       //   2. the Cash & Savings bucket, which can be spent without realising a loss
       //   3. everything else, pro rata (and within each asset, its dividend cash first)
-      if (draw > 0) {
+      if (draw > 0 && m <= drawMonths) {
         // Costs follow the same price level Real mode deflates by. Compounding r.inf
         // here instead ran a second, contradictory price model: it kept 1930s deflation
         // going for 25 years (a $5,000 bill fell to ~$1,000) and kept 1980's 13.5%
@@ -1094,14 +1115,14 @@ let simCache = new Map(), simCacheKey = '';
 function simOpts() {
   return { real:realMode, divs:divMode, withdraw:withdrawAmt,
            drawInflate:withdrawInflate, rebalance:rebalanceOn,
-           emergencyFund:efDollars() };
+           emergencyFund:efDollars(), drawMonths:gapMonths };
 }
 function sim(r) {
-  // efMonths belongs in the key: leaving it out would serve a stale simulation
-  // and the chart would sit still while the user typed into the field.
+  // efMonths and gapMonths belong in the key: leaving either out would serve a stale
+  // simulation and the chart would sit still while the user typed into the field.
   const key = Object.entries(ALLOC).map(([k,a]) => k+':'+a.value).join(',')
             + '|' + [realMode, divMode, withdrawAmt, withdrawInflate, rebalanceOn,
-                     efMonths].join('|');
+                     efMonths, gapMonths].join('|');
   if (key !== simCacheKey) { simCache = new Map(); simCacheKey = key; }
   if (!simCache.has(r.id)) simCache.set(r.id, simulate(r, simOpts()));
   return simCache.get(r.id);
@@ -1290,7 +1311,8 @@ function renderMainChart() {
 
   const modeTag=[realMode?'Real':'',divMode?'+Div':'',rebalanceOn?'Rebal':'',
     withdrawAmt>0?'$'+Math.round(withdrawAmt).toLocaleString()+'/mo costs':'',
-    withdrawAmt>0&&efMonths>0?(Math.round(efMonths*10)/10)+'-mo fund':'',
+    withdrawAmt>0?fmtMo(gapMonths)+' mo without income':'',
+    withdrawAmt>0&&efMonths>0?fmtMo(efMonths)+'-mo fund':'',
     benchOn&&recs.length!==1?'benchmark needs a single recession':''].filter(Boolean).join(' · ');
   canvas.setAttribute('aria-label',
     'Line chart, portfolio value through ' + recs.map(r=>r.name).join(', ')
@@ -1352,7 +1374,7 @@ const fmtMo = x => Math.round(x*10)/10;
 // months 1..N and part of the next.
 function efExplain(efGone){
   const expected = Math.ceil(efMonths - 1e-9), n = fmtMo(efMonths);
-  if (efGone === null) return `A ${n}-month fund covered every month modelled, so the portfolio was never sold to pay costs.`;
+  if (efGone === null) return `A ${n}-month fund covered the whole ${fmtMo(gapMonths)}-month gap in income, so nothing was sold to pay costs.`;
   if (efGone === expected) return '';
   return `Your costs ${efGone < expected ? 'rose with inflation' : 'fell with deflation'}, so a ${n}-month fund ran out in month ${efGone} rather than month ${expected}.`;
 }
@@ -1566,24 +1588,39 @@ function syncControls(){
   document.getElementById('withdrawInput').value = withdrawAmt || 0;
   document.getElementById('withdrawInflate').checked = withdrawInflate;
   document.getElementById('emergencyInput').value = efMonths || 0;
+  document.getElementById('gapInput').value = gapMonths;
   renderEmergencyNote();
   syncLogAvailability();
 }
-// The fund's caption and enabled state depend on costs too, so both handlers update
-// them at once rather than waiting for the debounced redraw.
+// The captions and enabled states depend on all three inputs, so every handler
+// updates them at once rather than waiting for the debounced redraw.
 function onWithdraw(v){ withdrawAmt=Math.max(0,parseFloat(v)||0); renderEmergencyNote(); scheduleRedraw(); }
+function onGapMonths(v){ gapMonths=Math.max(0,parseFloat(v)||0); renderEmergencyNote(); scheduleRedraw(); }
 function onEmergencyMonths(v){ efMonths=Math.max(0,parseFloat(v)||0); renderEmergencyNote(); scheduleRedraw(); }
-// The fund is measured in months of costs, so with no costs it has nothing to measure
-// against and does nothing — the input is disabled and says so. Like the benchmark
-// toggle, the months are kept rather than cleared: the setting is inapplicable, not
-// invalid, and comes back as soon as costs are entered.
+// The gap and the fund are both measured against costs, so with no costs they have
+// nothing to measure and do nothing — the inputs are disabled and say so. Like the
+// benchmark toggle, their values are kept rather than cleared: the setting is
+// inapplicable, not invalid, and comes back as soon as costs are entered.
+// The two captions are written to add up when read together: the gap caption gives the
+// total, and the fund caption splits the gap's months between fund and portfolio.
 function renderEmergencyNote(){
-  const el = document.getElementById('emergencyNote');
-  const input = document.getElementById('emergencyInput');
-  input.disabled = withdrawAmt <= 0;
-  if (withdrawAmt <= 0) { el.innerHTML = 'enter monthly costs first — the fund is measured in months of them'; return; }
-  if (efMonths <= 0) { el.innerHTML = 'none — costs come out of the portfolio from month 1'; return; }
-  el.innerHTML = `= <strong>$${Math.round(efDollars()).toLocaleString()}</strong> at today's costs, spent before anything is sold`;
+  const el = document.getElementById('emergencyNote'), gapEl = document.getElementById('gapNote');
+  const noCosts = withdrawAmt <= 0;
+  document.getElementById('emergencyInput').disabled = noCosts;
+  document.getElementById('gapInput').disabled = noCosts;
+  if (noCosts) {
+    gapEl.innerHTML = '';
+    el.innerHTML = 'enter monthly costs first — the fund is measured in months of them';
+    return;
+  }
+  const g = fmtMo(gapMonths), f = fmtMo(efMonths);
+  gapEl.innerHTML = gapMonths <= 0 ? 'no gap — costs never come from savings'
+    : `= <strong>$${Math.round(withdrawAmt * gapMonths).toLocaleString()}</strong> at today's costs, then income returns`;
+  if (gapMonths <= 0) { el.innerHTML = 'nothing to cover'; return; }
+  const dollars = `= <strong>$${Math.round(efDollars()).toLocaleString()}</strong>`;
+  if (efMonths <= 0) el.innerHTML = `none — the portfolio pays all ${g} months`;
+  else if (efMonths >= gapMonths) el.innerHTML = `${dollars} — covers the whole gap, so nothing is sold to pay costs`;
+  else el.innerHTML = `${dollars} — covers the first ${f} months, then the portfolio pays the other ${fmtMo(gapMonths - efMonths)}`;
 }
 function onWithdrawInflate(on){ withdrawInflate=on; refreshAll(); }
 function setRebalance(on){ rebalanceOn=on; syncControls(); refreshAll(); }
@@ -1632,6 +1669,7 @@ function stateToHash(){
     'f=' + FLAGS.map(f => f() ? 1 : 0).join(''),
   ];
   if (withdrawAmt > 0) parts.push('w=' + Math.round(withdrawAmt));
+  if (withdrawAmt > 0) parts.push('g=' + Math.round(gapMonths * 100) / 100);
   if (efMonths > 0) parts.push('em=' + Math.round(efMonths * 100) / 100);
   return parts.join('&');
 }
@@ -1669,6 +1707,10 @@ function applyHash(){
   // em= is months of costs. Links written while the fund was entered in dollars carry
   // e= instead; dividing by the same link's costs gives the identical fund. Absent on
   // links written before the fund existed, which is the same as not having one.
+  // g= is the months without income. Links written before it existed paid costs for
+  // the whole window, which is the behaviour being retired, so they get the default.
+  const g = parseFloat(p.g);
+  gapMonths = isFinite(g) && g >= 0 ? g : DEFAULT_GAP;
   const em = parseFloat(p.em), e = parseFloat(p.e);
   efMonths = isFinite(em) && em > 0 ? em
            : isFinite(e) && e > 0 && withdrawAmt > 0 ? e / withdrawAmt : 0;

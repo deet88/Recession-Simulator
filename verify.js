@@ -60,10 +60,10 @@ const EXPOSE = `;({ simulate, sim, makePath, assetImpact, contribs, extremeIndex
   ALLOC, BASE, PRESETS, RECESSIONS, LONG_RUN_INFLATION, POST_RECOVERY_GROWTH,
   stateToHash, applyHash, benchPath, benchDrawdown, benchSim, simulate,
   endOfPath, extremeOf, syncBenchAvailability, renderEditor, efDollars,
-  onEmergencyMonths, onWithdraw, renderEmergencyNote, recoveryLabel, neverFell, efExplain, shapeAt, fmtEdge,
+  onEmergencyMonths, onWithdraw, onGapMonths, renderEmergencyNote, recoveryLabel, neverFell, efExplain, shapeAt, fmtEdge,
   ASSET_GROUPS, PRESET_META, renderPresetDefs, presetSummary,
   state: () => ({ chartMode, realMode, divMode, logScale, withdrawAmt,
-                  withdrawInflate, rebalanceOn, benchOn, efMonths,
+                  withdrawInflate, rebalanceOn, benchOn, efMonths, gapMonths,
                   selected: Array.from(selected).sort().join(','),
                   alloc: Object.keys(ALLOC).map(k => k+':'+Math.round(ALLOC[k].value)).join(',') }),
   setState: (o) => { if (o.chartMode !== undefined) chartMode = o.chartMode;
@@ -75,6 +75,7 @@ const EXPOSE = `;({ simulate, sim, makePath, assetImpact, contribs, extremeIndex
                      if (o.rebalanceOn !== undefined) rebalanceOn = o.rebalanceOn;
                      if (o.benchOn !== undefined) benchOn = o.benchOn;
                      if (o.efMonths !== undefined) efMonths = o.efMonths;
+                     if (o.gapMonths !== undefined) gapMonths = o.gapMonths;
                      if (o.selected !== undefined) selected = new Set(o.selected);
                      simCacheKey = ''; },
   setModes: (rm, dm) => { realMode = rm; divMode = dm; simCacheKey = ''; },
@@ -645,7 +646,7 @@ A.setAlloc(A.cp(A.BASE));
   ok('ef/a fund measurably softens the drawdown', lots > none + 1000);
 
   // It must also delay outright depletion rather than merely deepening it later.
-  A.setState({ withdrawAmt:60000, efMonths:0 });  const depNoEF = A.sim(r08).depletedAt;
+  A.setState({ withdrawAmt:60000, efMonths:0, gapMonths:48 });  const depNoEF = A.sim(r08).depletedAt;
   A.setState({ efMonths:10 });                    const depEF = A.sim(r08).depletedAt;
   ok('ef/delays portfolio exhaustion', depNoEF !== null && depEF !== null && depEF > depNoEF,
      'without ' + depNoEF + ' vs with ' + depEF);
@@ -655,7 +656,7 @@ A.setAlloc(A.cp(A.BASE));
   const withCash = A.cp(A.BASE);
   KEYS.forEach(k => withCash[k].value = k === 'cash' ? 100000 : (k === 'largeCap' ? 900000 : 0));
   A.setAlloc(withCash);
-  A.setState({ withdrawAmt:5000, efMonths:0 });
+  A.setState({ withdrawAmt:5000, efMonths:0, gapMonths:48 });
   const c = A.sim(r08), cNo = A.simulate(r08, {alloc:withCash, withdraw:0});
   ok('ef/cash absorbs the whole cost before anything is sold',
      near(cNo.byAsset.cash[10] - c.byAsset.cash[10], 50000, 0.01),
@@ -695,7 +696,7 @@ A.setAlloc(A.cp(A.BASE));
   ok('ui/caption states the fund in dollars', /\$60,000/.test(els['emergencyNote'].innerHTML),
      'caption: ' + els['emergencyNote'].innerHTML);
   A.onEmergencyMonths(0);
-  ok('ui/caption says costs hit the portfolio with no fund', /from month 1/.test(els['emergencyNote'].innerHTML));
+  ok('ui/caption says costs hit the portfolio with no fund', /portfolio pays all \d+ months/.test(els['emergencyNote'].innerHTML));
 
   // The card's run-out month must reconcile with the caption's months. Without
   // inflation-linked costs an N-month fund runs out in month ceil(N) and needs no note;
@@ -773,23 +774,18 @@ A.setAlloc(A.cp(A.BASE));
        'last month paid $' + paidLast.toFixed(2));
   }
 
-  // The reported low is the lowest point on the path, wherever it falls. Costs paid
-  // through the recovery pushed Dot-com's true low to month 87 while the card
-  // reported month 31's.
+  // The reported low is the lowest point through the recession and the S&P's recovery
+  // window, wherever it falls. With costs paid across that whole window, Dot-com's low
+  // is month 87, not the downturn's month 31.
   A.setAlloc(A.cp(A.BASE));
-  A.setState({ realMode:false, divMode:false, withdrawAmt:4000, withdrawInflate:true, efMonths:0 });
+  A.setState({ realMode:false, divMode:false, withdrawAmt:4000, withdrawInflate:true, efMonths:0,
+               gapMonths:87 });
   const r01 = A.RECESSIONS.find(x => x.id === 'r2001');
   const lo = Math.min.apply(null, A.sim(r01).total.slice(0, r01.dur + r01.rec + 1));
   ok('low/Dot-com with costs reports the true low', near(A.pathExtreme(r01), lo, 0.01),
      'reported $' + Math.round(A.pathExtreme(r01)) + ' vs true low $' + Math.round(lo));
   ok('low/Dot-com low is after the downturn', A.extremeIndex(r01) > r01.dur,
      'at month ' + A.extremeIndex(r01));
-  // These costs outrun the assumed 7% growth and empty the book years later. That is
-  // reported as its own warning, not folded into the recession's drawdown.
-  ok('low/later depletion is still reported', A.sim(r01).depletedAt !== null &&
-     A.sim(r01).depletedAt > r01.dur + r01.rec, 'depletedAt ' + A.sim(r01).depletedAt);
-  ok('low/later depletion does not become the drawdown', A.pathExtreme(r01) > 0.4 * A.tot(),
-     'reported $' + Math.round(A.pathExtreme(r01)));
   // The per-asset bars still reconcile at that later month.
   ok('low/assets still sum to the headline at a late low',
      near(KEYS.reduce((a,k) => a + A.assetImpact(r01, k), 0), A.pathExtreme(r01) - A.tot(), 0.01));
@@ -804,7 +800,7 @@ A.setAlloc(A.cp(A.BASE));
   // A book emptied by costs must report its low in the month it ran out — selling
   // pro rata used to leave float dust, putting the low one month after the warning.
   A.setAlloc(A.cp(A.BASE));
-  A.setState({ realMode:false, withdrawAmt:5000, withdrawInflate:true, efMonths:6 });
+  A.setState({ realMode:false, withdrawAmt:5000, withdrawInflate:true, efMonths:6, gapMonths:400 });
   const gdx = A.RECESSIONS.find(x => x.id === 'depression'), sx = A.sim(gdx);
   ok('low/run-out month is the low month', sx.depletedAt !== null && A.extremeIndex(gdx) === sx.depletedAt,
      'ran out ' + sx.depletedAt + ', low at ' + A.extremeIndex(gdx));
@@ -814,6 +810,86 @@ A.setAlloc(A.cp(A.BASE));
   ok('ui/a real gap keeps its sign', A.fmtEdge(19.7, true) === '+19.7 pts better' && A.fmtEdge(-3.2, true) === '-3.2 pts worse');
   A.setAlloc(A.cp(A.BASE));
   A.setState({ realMode:false, withdrawAmt:0 });
+}
+
+// ── 15. Months without income ───────────────────────────────────────────────
+// Costs used to be paid every month for the whole modelled window — up to 15 years past
+// the recovery — so any meaningful cost turned every line into a slow slide to zero
+// that said nothing about the recession. They are now paid only for the gap.
+{
+  const r08 = A.RECESSIONS.find(x => x.id === 'r2008');
+  // Costs stop after the gap: a cash book pays exactly gap × cost, then sits still.
+  const s = A.simulate(r08, { alloc: only('cash', 100000), withdraw: 1000, drawMonths: 12 });
+  ok('gap/costs are paid for exactly the gap', near(s.total[0] - s.total[12], 12000, 1e-6),
+     'paid $' + (s.total[0] - s.total[12]));
+  ok('gap/costs stop when income returns', s.total.slice(12).every(v => near(v, 88000, 1e-6)));
+  ok('gap/a zero gap pays nothing',
+     A.simulate(r08, { alloc: only('cash', 100000), withdraw: 1000, drawMonths: 0 }).total.every(v => near(v, 100000, 1e-6)));
+  ok('gap/unset means unlimited for direct engine calls',
+     A.simulate(r08, { alloc: only('cash', 100000), withdraw: 1000 }).total[60] < 100000 - 59000);
+
+  // The app passes the user's gap, and the default is 12 months.
+  A.setAlloc(A.cp(A.BASE));
+  A.setState({ realMode:false, divMode:false, withdrawAmt:5000, withdrawInflate:false, efMonths:0, gapMonths:12 });
+  const twelve = A.simulate(r08, { withdraw: 5000, drawMonths: 12 }).total;
+  const forever = A.simulate(r08, { withdraw: 5000 }).total;
+  ok('gap/app passes the gap to the engine', A.sim(r08).total.length === twelve.length &&
+     A.sim(r08).total.every((v,i) => near(v, twelve[i], 1e-6)) && !near(A.sim(r08).total[30], forever[30], 1));
+
+  // The scenario that prompted this: $9,500/mo, 4-month fund, every recession, both
+  // modes. Nothing should be emptied, and every path that fell should recover.
+  const user = A.cp(A.BASE); KEYS.forEach(k => user[k].value = A.BASE[k].value * 1.269747);
+  A.setAlloc(user);
+  for (const [rm, dm] of MODES) {
+    A.setState({ realMode:rm, divMode:dm, withdrawAmt:9500, withdrawInflate:true, efMonths:4, gapMonths:12 });
+    const emptied = A.RECESSIONS.filter(r => A.sim(r).depletedAt !== null).map(r => r.id);
+    ok('gap/' + modeName(rm, dm) + ' a 12-month gap empties nothing', emptied.length === 0, emptied.join(','));
+    if (!rm) {
+      const stuck = A.RECESSIONS.filter(r => !A.neverFell(r) && A.recoveryMonths(r) === null).map(r => r.id);
+      ok('gap/' + modeName(rm, dm) + ' every path recovers', stuck.length === 0, stuck.join(','));
+    }
+  }
+  A.setAlloc(A.cp(A.BASE));
+
+  // The gap is part of the cache key; drive the real handler, as typing would.
+  A.setState({ realMode:false, divMode:false, withdrawAmt:5000, withdrawInflate:false, efMonths:0, gapMonths:12 });
+  const at12 = A.pathExtreme(r08);
+  A.onGapMonths(36);
+  ok('gap/changing the gap invalidates the simulation cache', A.pathExtreme(r08) < at12 - 1);
+  A.onGapMonths(12);
+
+  // Captions: the gap's total and the fund's split must add up.
+  A.onWithdraw(9500); A.onGapMonths(12); A.onEmergencyMonths(4);
+  ok('ui/gap caption states the total', /\$114,000/.test(els['gapNote'].innerHTML), els['gapNote'].innerHTML);
+  ok('ui/fund caption splits the gap', /first 4 months.*other 8/.test(els['emergencyNote'].innerHTML),
+     els['emergencyNote'].innerHTML);
+  A.onEmergencyMonths(12);
+  ok('ui/a fund covering the gap says nothing is sold', /covers the whole gap/.test(els['emergencyNote'].innerHTML));
+  A.onEmergencyMonths(0);
+  ok('ui/no fund says the portfolio pays it all', /portfolio pays all 12 months/.test(els['emergencyNote'].innerHTML));
+  A.onWithdraw(0);
+  ok('ui/gap input disabled with no costs', els['gapInput'].disabled === true);
+  ok('ui/disabling keeps the gap', A.state().gapMonths === 12);
+  A.onWithdraw(5000);
+  ok('ui/gap input enabled once costs are set', els['gapInput'].disabled === false);
+
+  // A fund longer than the gap leaves the portfolio identical to paying nothing.
+  A.setState({ withdrawAmt:5000, efMonths:20, gapMonths:12 });
+  const noCost = A.simulate(r08, {}).total;
+  ok('gap/a fund longer than the gap shields the portfolio',
+     A.sim(r08).total.every((v,i) => near(v, noCost[i], 1e-6)) && A.sim(r08).efDepletedAt === null);
+  ok('gap/card note names the gap', /whole 12-month gap/.test(A.efExplain(null)), A.efExplain(null));
+
+  // Links: g= round-trips; a link without it gets the default.
+  A.setState({ withdrawAmt:5000, efMonths:3, gapMonths:18, selected:['r2008'] });
+  location.hash = '#' + A.stateToHash();
+  A.setState({ gapMonths:1 });
+  A.applyHash();
+  ok('url/round-trips gapMonths', A.state().gapMonths === 18, 'got ' + A.state().gapMonths);
+  location.hash = '#a=400000.50000.30000.100000.150000.200000.5000.40000.10000.15000.0&s=r2008&m=a&f=000100&w=3000';
+  A.applyHash();
+  ok('url/a link without g= gets the 12-month default', A.state().gapMonths === 12, 'got ' + A.state().gapMonths);
+  A.setState({ withdrawAmt:0, efMonths:0, gapMonths:12 });
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
